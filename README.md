@@ -72,7 +72,7 @@ El script parte con un bloque que borra sus propios objetos si ya existen, para 
 
 - **Comentarios:** solo los que pide el plan, escritos en plural y referidos al código. Cada objeto lleva una cabecera con *¿A qué problema responde?*, *¿Qué dicen los datos?* y *Supuestos*. La especificación de cada package dice qué es público, qué es privado y por qué.
 - **Fecha de corte:** `FN_FECHA_CORTE` devuelve `MAX(RENTAL_DATE)` sin truncar, 14/02/2006 15:16:03. Es la única fuente de esa fecha; nadie la escribe a mano.
-- **Días de atraso:** se cuentan como Sakila, por día iniciado: `CEIL(fecha final - RENTAL_DATE) - RENTAL_DURATION`.
+- **Días de atraso:** se cuentan como Sakila, por días de calendario: `TRUNC(fecha final) - TRUNC(RENTAL_DATE) - RENTAL_DURATION`. Con esa regla calzan los 15.861 pagos de arriendos devueltos.
 - **Clientes activos:** `ACTIVE` vale `'1'` o `'Y'` para activo y `'0'` o `'N'` para inactivo.
 - **IDs nuevos:** los pagos usan `SEQ_PAYMENT_ID.NEXTVAL`. Las pruebas que insertan en `RENTAL` guardan `MAX(RENTAL_ID) + 1` en una variable antes del `INSERT ... VALUES`.
 - **Transacciones:** ningún procedimiento, función ni trigger hace `COMMIT` ni `ROLLBACK`. El que escribe abre un `SAVEPOINT` y, si falla, vuelve a él y hace `RAISE`. Cierra quien llama: la prueba con `ROLLBACK` y el proceso mensual con `COMMIT`.

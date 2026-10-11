@@ -17,13 +17,13 @@ CORTE AS (
 ),
 DEVUELTO AS (
     SELECT A.*,
-           CEIL(A.RETURN_DATE - A.RENTAL_DATE) AS DIAS
+           TRUNC(A.RETURN_DATE) - TRUNC(A.RENTAL_DATE) AS DIAS
     FROM ARRIENDO A
     WHERE A.RETURN_DATE IS NOT NULL
 ),
 SIN_DEVOLVER AS (
     SELECT A.*,
-           CEIL(C.FECHA_CORTE - A.RENTAL_DATE) - A.RENTAL_DURATION AS DIAS_ATRASO
+           TRUNC(C.FECHA_CORTE) - TRUNC(A.RENTAL_DATE) - A.RENTAL_DURATION AS DIAS_ATRASO
     FROM ARRIENDO A
     CROSS JOIN CORTE C
     WHERE A.RETURN_DATE IS NULL
@@ -37,7 +37,7 @@ CON_VENCIDA AS (
         FROM ARRIENDO A
         WHERE A.CUSTOMER_ID = B.CUSTOMER_ID
           AND A.RENTAL_ID  <> B.RENTAL_ID
-          AND A.RENTAL_DATE + A.RENTAL_DURATION < B.RENTAL_DATE
+          AND TRUNC(B.RENTAL_DATE) - TRUNC(A.RENTAL_DATE) > A.RENTAL_DURATION
           AND (A.RETURN_DATE IS NULL OR A.RETURN_DATE > B.RENTAL_DATE)
     )
 ),
@@ -78,21 +78,21 @@ FROM (
     WHERE CONSTRAINT_NAME = 'FK_PAYMENT_RENTAL'
       AND DELETE_RULE     = 'SET NULL'
     UNION ALL
-    SELECT 4, 'H3', 'Dias cobrables promedio que se retiene una pelicula', ROUND(AVG(DIAS), 1), 5.5
+    SELECT 4, 'H3', 'Dias promedio que se retiene una pelicula', ROUND(AVG(DIAS), 1), 5
     FROM DEVUELTO
     UNION ALL
     SELECT 5, 'H3', '% devoluciones tarde con plazo de 3 dias',
-           ROUND(100 * AVG(CASE WHEN DIAS > RENTAL_DURATION THEN 1 ELSE 0 END), 1), 72.1
+           ROUND(100 * AVG(CASE WHEN DIAS > RENTAL_DURATION THEN 1 ELSE 0 END), 1), 66.9
     FROM DEVUELTO
     WHERE RENTAL_DURATION = 3
     UNION ALL
     SELECT 6, 'H3', '% devoluciones tarde con plazo de 7 dias',
-           ROUND(100 * AVG(CASE WHEN DIAS > RENTAL_DURATION THEN 1 ELSE 0 END), 1), 29.1
+           ROUND(100 * AVG(CASE WHEN DIAS > RENTAL_DURATION THEN 1 ELSE 0 END), 1), 23.3
     FROM DEVUELTO
     WHERE RENTAL_DURATION = 7
     UNION ALL
-    SELECT 7, 'H3', '% devoluciones tarde en total (1 de cada 2)',
-           ROUND(100 * AVG(CASE WHEN DIAS > RENTAL_DURATION THEN 1 ELSE 0 END), 1), 51.2
+    SELECT 7, 'H3', '% devoluciones tarde en total',
+           ROUND(100 * AVG(CASE WHEN DIAS > RENTAL_DURATION THEN 1 ELSE 0 END), 1), 45.8
     FROM DEVUELTO
     UNION ALL
     SELECT 8, 'H4', 'Multa cobrada USD (monto sobre la tarifa)',
@@ -103,21 +103,22 @@ FROM (
     SELECT 9, 'H4', 'Ingreso total USD', ROUND(SUM(AMOUNT)), 67417
     FROM PAYMENT
     UNION ALL
-    SELECT 10, 'H4', '% del ingreso que es multa',
-           ROUND(100 * SUM(P.AMOUNT - D.RENTAL_RATE) / (SELECT SUM(AMOUNT) FROM PAYMENT)), 30
-    FROM PAYMENT P
-    JOIN DEVUELTO D ON D.RENTAL_ID = P.RENTAL_ID
+    SELECT 10, 'H4', '% del ingreso que es multa', ROUND(100 * M.MULTA / T.TOTAL), 30
+    FROM (SELECT SUM(P.AMOUNT - D.RENTAL_RATE) AS MULTA
+          FROM PAYMENT P
+          JOIN DEVUELTO D ON D.RENTAL_ID = P.RENTAL_ID) M
+    CROSS JOIN (SELECT SUM(AMOUNT) AS TOTAL FROM PAYMENT) T
     UNION ALL
-    SELECT 11, 'H4', 'Pagos que no siguen tarifa + 1 USD por dia iniciado de atraso', COUNT(*), 0
+    SELECT 11, 'H4', 'Pagos que no siguen tarifa + 1 USD por dia de calendario de atraso', COUNT(*), 0
     FROM PAYMENT P
     JOIN DEVUELTO D ON D.RENTAL_ID = P.RENTAL_ID
     WHERE P.AMOUNT <> D.RENTAL_RATE + GREATEST(D.DIAS - D.RENTAL_DURATION, 0)
     UNION ALL
     SELECT 12, 'H5', 'Clientes que arrendaron con otra copia vencida en casa',
-           COUNT(DISTINCT CUSTOMER_ID), 548
+           COUNT(DISTINCT CUSTOMER_ID), 490
     FROM CON_VENCIDA
     UNION ALL
-    SELECT 13, 'H5', 'Arriendos hechos con otra copia vencida en casa', COUNT(*), 2434
+    SELECT 13, 'H5', 'Arriendos hechos con otra copia vencida en casa', COUNT(*), 1709
     FROM CON_VENCIDA
     UNION ALL
     SELECT 14, 'H6', 'Clientes inactivos', COUNT(*), 15
@@ -153,7 +154,7 @@ FROM (
     FROM SIN_DEVOLVER
     UNION ALL
     SELECT 22, 'H9', 'Dias de atraso de esa copia',
-           MAX(CASE WHEN DIAS_ATRASO > REPLACEMENT_COST THEN DIAS_ATRASO END), 172
+           MAX(CASE WHEN DIAS_ATRASO > REPLACEMENT_COST THEN DIAS_ATRASO END), 171
     FROM SIN_DEVOLVER
     UNION ALL
     SELECT 23, 'H9', 'Costo de reposicion de esa copia USD',
