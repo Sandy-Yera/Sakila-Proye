@@ -1,4 +1,4 @@
-# sakila-ep2-g01
+# Sakila-Proye
 
 Evaluación Parcial 2 de BDY1103 Taller de Base de Datos, sección 003D, grupo G01: Gabriel Sandoval, Simón Inostroza y Catalina Lobos.
 
@@ -39,11 +39,11 @@ Con la conexión `SAKILA_BDY1103`, abrir `pruebas/00_VERIFICACION_H1_H10.sql` y 
 
 La consulta compara cada cifra calculada en Oracle con la del plan. Las filas `H1` a `H10` y `P1` deben salir `OK`; si alguna sale `REVISAR`, manda Oracle y se corrige la cifra en el informe.
 
-Las filas `RIESGO` revisan si `PAYMENT_SEQUENCE` y `RENTAL_SEQUENCE` entregarían un ID que ya existe. En una instalación recién hecha salen `REVISAR`: ambas secuencias parten en 1 y los datos cargados ya usan los IDs hasta 16.049. Mientras sea así, ningún `INSERT` en `PAYMENT` o `RENTAL` puede omitir el ID.
+Las filas `RIESGO` confirman que `PAYMENT_SEQUENCE` y `RENTAL_SEQUENCE` de Sakila parten en 1 y chocan con los IDs cargados, que llegan a 16.049. Deben salir `OK`. Por eso ningún `INSERT` en `PAYMENT` o `RENTAL` omite el ID: ver convenciones.
 
 ## Orden del script final
 
-1. Tablas y secuencias nuevas: `CLIENTE_MEDALLA`, `AUDITORIA_SAKILA`.
+1. Tablas y secuencias nuevas: `CLIENTE_MEDALLA`, `AUDITORIA_SAKILA` y su secuencia, `SEQ_PAYMENT_ID`.
 2. `FN_FECHA_CORTE`.
 3. Especificaciones de los dos packages.
 4. Funciones y procedimientos sueltos.
@@ -66,8 +66,16 @@ El script parte con un bloque que borra sus propios objetos si ya existen, para 
 - Una rama por persona (`gabriel`, `simon`, `catalina`). Se une a `main` cuando la prueba individual pasa.
 - Un issue por objeto. Si depende de otro, lleva la etiqueta `bloqueado-por` con el nombre del objeto que espera.
 - Toda prueba que modifica datos termina en `ROLLBACK`. Las cifras del informe salen siempre de la base original.
-- `FN_FECHA_CORTE` es la única fuente de la fecha de corte. Nadie escribe esa fecha a mano.
 - Estilo de la P1: palabras reservadas y objetos en mayúsculas, variables con `%TYPE`, prefijos `PKG_`, `SP_`, `FN_`, `TRG_` y nombres en español.
+
+## Convenciones acordadas
+
+- **Comentarios:** solo los que pide el plan, escritos en plural y referidos al código. Cada objeto lleva una cabecera con *¿A qué problema responde?*, *¿Qué dicen los datos?* y *Supuestos*. La especificación de cada package dice qué es público, qué es privado y por qué.
+- **Fecha de corte:** `FN_FECHA_CORTE` devuelve `MAX(RENTAL_DATE)` sin truncar, 14/02/2006 15:16:03. Es la única fuente de esa fecha; nadie la escribe a mano.
+- **Días de atraso:** se cuentan como Sakila, por día iniciado: `CEIL(fecha final - RENTAL_DATE) - RENTAL_DURATION`.
+- **Clientes activos:** `ACTIVE` vale `'1'` o `'Y'` para activo y `'0'` o `'N'` para inactivo.
+- **IDs nuevos:** los pagos usan `SEQ_PAYMENT_ID.NEXTVAL`. Las pruebas que insertan en `RENTAL` guardan `MAX(RENTAL_ID) + 1` en una variable antes del `INSERT ... VALUES`.
+- **Transacciones:** ningún procedimiento, función ni trigger hace `COMMIT` ni `ROLLBACK`. El que escribe abre un `SAVEPOINT` y, si falla, vuelve a él y hace `RAISE`. Cierra quien llama: la prueba con `ROLLBACK` y el proceso mensual con `COMMIT`.
 
 ## Objetos por persona
 
@@ -75,7 +83,7 @@ El script parte con un bloque que borra sus propios objetos si ya existen, para 
 |---|---|
 | Gabriel | `CLIENTE_MEDALLA`, `FN_FECHA_CORTE`, `FN_PORCENTAJE_EN_PLAZO`, `FN_PUEDE_ARRENDAR`, `SP_MEDALLA_CLIENTE`, `SP_ACTUALIZA_MEDALLAS`, `PKG_RESPONSABILIDAD_CLIENTE` |
 | Simón | `FN_MULTA_CON_TOPE`, `FN_RENTABILIDAD_COPIA`, `FN_CAPITAL_EN_RIESGO`, `SP_REPORTE_FUGA`, `SP_SIMULA_PLAZO`, `PKG_COBRANZA_INVENTARIO` |
-| Catalina | `AUDITORIA_SAKILA` y su secuencia, `TRG_VALIDA_PAGO_RENTAL`, `TRG_TOPE_MULTA_DEVOLUCION`, `TRG_VALIDA_ARRIENDO`, `TRG_BLOQUEA_BORRADO_RENTAL`, `TRG_AUDITA_RENTAL`, `TRG_AUDITA_PAYMENT` |
+| Catalina | `AUDITORIA_SAKILA` y su secuencia, `SEQ_PAYMENT_ID`, `TRG_VALIDA_PAGO_RENTAL`, `TRG_TOPE_MULTA_DEVOLUCION`, `TRG_VALIDA_ARRIENDO`, `TRG_BLOQUEA_BORRADO_RENTAL`, `TRG_AUDITA_RENTAL`, `TRG_AUDITA_PAYMENT` |
 
 ## Entregables
 

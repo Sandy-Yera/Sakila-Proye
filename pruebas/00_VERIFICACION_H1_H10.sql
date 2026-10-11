@@ -12,19 +12,18 @@ ARRIENDO AS (
     JOIN FILM F      ON F.FILM_ID      = I.FILM_ID
 ),
 CORTE AS (
-    SELECT TRUNC(MAX(RENTAL_DATE)) AS FECHA_CORTE,
-           MAX(RENTAL_DATE)        AS ULTIMO_ARRIENDO
+    SELECT MAX(RENTAL_DATE) AS FECHA_CORTE
     FROM RENTAL
 ),
 DEVUELTO AS (
     SELECT A.*,
-           TRUNC(A.RETURN_DATE - A.RENTAL_DATE) AS DIAS
+           CEIL(A.RETURN_DATE - A.RENTAL_DATE) AS DIAS
     FROM ARRIENDO A
     WHERE A.RETURN_DATE IS NOT NULL
 ),
 SIN_DEVOLVER AS (
     SELECT A.*,
-           TRUNC(C.FECHA_CORTE - A.RENTAL_DATE) - A.RENTAL_DURATION AS DIAS_ATRASO
+           CEIL(C.FECHA_CORTE - A.RENTAL_DATE) - A.RENTAL_DURATION AS DIAS_ATRASO
     FROM ARRIENDO A
     CROSS JOIN CORTE C
     WHERE A.RETURN_DATE IS NULL
@@ -79,21 +78,21 @@ FROM (
     WHERE CONSTRAINT_NAME = 'FK_PAYMENT_RENTAL'
       AND DELETE_RULE     = 'SET NULL'
     UNION ALL
-    SELECT 4, 'H3', 'Dias promedio que se retiene una pelicula', ROUND(AVG(DIAS), 1), 4.5
+    SELECT 4, 'H3', 'Dias cobrables promedio que se retiene una pelicula', ROUND(AVG(DIAS), 1), 5.5
     FROM DEVUELTO
     UNION ALL
     SELECT 5, 'H3', '% devoluciones tarde con plazo de 3 dias',
-           ROUND(100 * AVG(CASE WHEN DIAS > RENTAL_DURATION THEN 1 ELSE 0 END), 1), 61.8
+           ROUND(100 * AVG(CASE WHEN DIAS > RENTAL_DURATION THEN 1 ELSE 0 END), 1), 72.1
     FROM DEVUELTO
     WHERE RENTAL_DURATION = 3
     UNION ALL
     SELECT 6, 'H3', '% devoluciones tarde con plazo de 7 dias',
-           ROUND(100 * AVG(CASE WHEN DIAS > RENTAL_DURATION THEN 1 ELSE 0 END), 1), 17.7
+           ROUND(100 * AVG(CASE WHEN DIAS > RENTAL_DURATION THEN 1 ELSE 0 END), 1), 29.1
     FROM DEVUELTO
     WHERE RENTAL_DURATION = 7
     UNION ALL
-    SELECT 7, 'H3', '% devoluciones tarde en total (4 de cada 10)',
-           ROUND(100 * AVG(CASE WHEN DIAS > RENTAL_DURATION THEN 1 ELSE 0 END)), 40
+    SELECT 7, 'H3', '% devoluciones tarde en total (1 de cada 2)',
+           ROUND(100 * AVG(CASE WHEN DIAS > RENTAL_DURATION THEN 1 ELSE 0 END), 1), 51.2
     FROM DEVUELTO
     UNION ALL
     SELECT 8, 'H4', 'Multa cobrada USD (monto sobre la tarifa)',
@@ -112,8 +111,7 @@ FROM (
     SELECT 11, 'H4', 'Pagos que no siguen tarifa + 1 USD por dia iniciado de atraso', COUNT(*), 0
     FROM PAYMENT P
     JOIN DEVUELTO D ON D.RENTAL_ID = P.RENTAL_ID
-    WHERE P.AMOUNT <> D.RENTAL_RATE
-                      + GREATEST(CEIL(D.RETURN_DATE - D.RENTAL_DATE) - D.RENTAL_DURATION, 0)
+    WHERE P.AMOUNT <> D.RENTAL_RATE + GREATEST(D.DIAS - D.RENTAL_DURATION, 0)
     UNION ALL
     SELECT 12, 'H5', 'Clientes que arrendaron con otra copia vencida en casa',
            COUNT(DISTINCT CUSTOMER_ID), 548
@@ -124,12 +122,12 @@ FROM (
     UNION ALL
     SELECT 14, 'H6', 'Clientes inactivos', COUNT(*), 15
     FROM CUSTOMER
-    WHERE ACTIVE = '0'
+    WHERE ACTIVE IN ('0', 'N')
     UNION ALL
     SELECT 15, 'H6', 'Arriendos de clientes inactivos', COUNT(*), 404
     FROM RENTAL R
     JOIN CUSTOMER C ON C.CUSTOMER_ID = R.CUSTOMER_ID
-    WHERE C.ACTIVE = '0'
+    WHERE C.ACTIVE IN ('0', 'N')
     UNION ALL
     SELECT 16, 'H7', 'Copias que aun no recuperan su costo de reposicion',
            COUNT(CASE WHEN INGRESO < REPLACEMENT_COST THEN 1 END), 3331
@@ -155,7 +153,7 @@ FROM (
     FROM SIN_DEVOLVER
     UNION ALL
     SELECT 22, 'H9', 'Dias de atraso de esa copia',
-           MAX(CASE WHEN DIAS_ATRASO > REPLACEMENT_COST THEN DIAS_ATRASO END), 170
+           MAX(CASE WHEN DIAS_ATRASO > REPLACEMENT_COST THEN DIAS_ATRASO END), 172
     FROM SIN_DEVOLVER
     UNION ALL
     SELECT 23, 'H9', 'Costo de reposicion de esa copia USD',
@@ -175,8 +173,8 @@ FROM (
            OR COLUMN_NAME LIKE '%MODIFIED%'
            OR COLUMN_NAME LIKE '%CREATED%')
     UNION ALL
-    SELECT 26, 'P1', 'Fecha de corte = ultimo arriendo truncado (AAAAMMDD)',
-           TO_NUMBER(TO_CHAR(FECHA_CORTE, 'YYYYMMDD')), 20060214
+    SELECT 26, 'P1', 'Fecha de corte = ultimo arriendo exacto (AAAAMMDDHH24MISS)',
+           TO_NUMBER(TO_CHAR(FECHA_CORTE, 'YYYYMMDDHH24MISS')), 20060214151603
     FROM CORTE
     UNION ALL
     SELECT 27, 'P1', 'Arriendos sin devolver', COUNT(*), 183
@@ -184,7 +182,7 @@ FROM (
     UNION ALL
     SELECT 28, 'P1', 'Sin devolver arrendados en el ultimo instante del dataset', COUNT(*), 182
     FROM SIN_DEVOLVER S
-    JOIN CORTE C ON S.RENTAL_DATE = C.ULTIMO_ARRIENDO
+    JOIN CORTE C ON S.RENTAL_DATE = C.FECHA_CORTE
     UNION ALL
     SELECT 29, 'P1', 'Fuga real: sin devolver y vencidos a la fecha de corte',
            COUNT(CASE WHEN DIAS_ATRASO > 0 THEN 1 END), 1
@@ -201,13 +199,13 @@ FROM (
     FROM PAYMENT P
     JOIN SIN_DEVOLVER S ON S.RENTAL_ID = P.RENTAL_ID
     UNION ALL
-    SELECT 32, 'RIESGO', 'PAYMENT_SEQUENCE entregaria un PAYMENT_ID ya usado (1 = si)',
-           CASE WHEN S.LAST_NUMBER <= (SELECT MAX(PAYMENT_ID) FROM PAYMENT) THEN 1 ELSE 0 END, 0
+    SELECT 32, 'RIESGO', 'PAYMENT_SEQUENCE de Sakila choca con PAYMENT_ID cargados (1 = si)',
+           CASE WHEN S.LAST_NUMBER <= (SELECT MAX(PAYMENT_ID) FROM PAYMENT) THEN 1 ELSE 0 END, 1
     FROM USER_SEQUENCES S
     WHERE S.SEQUENCE_NAME = 'PAYMENT_SEQUENCE'
     UNION ALL
-    SELECT 33, 'RIESGO', 'RENTAL_SEQUENCE entregaria un RENTAL_ID ya usado (1 = si)',
-           CASE WHEN S.LAST_NUMBER <= (SELECT MAX(RENTAL_ID) FROM RENTAL) THEN 1 ELSE 0 END, 0
+    SELECT 33, 'RIESGO', 'RENTAL_SEQUENCE de Sakila choca con RENTAL_ID cargados (1 = si)',
+           CASE WHEN S.LAST_NUMBER <= (SELECT MAX(RENTAL_ID) FROM RENTAL) THEN 1 ELSE 0 END, 1
     FROM USER_SEQUENCES S
     WHERE S.SEQUENCE_NAME = 'RENTAL_SEQUENCE'
 )
