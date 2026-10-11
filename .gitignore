@@ -1,0 +1,8 @@
+*.md
+!README.md
+
+~$*
+*.tmp
+*.log
+.DS_Store
+Thumbs.db

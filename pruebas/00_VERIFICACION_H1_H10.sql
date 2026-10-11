@@ -1,0 +1,214 @@
+WITH
+ARRIENDO AS (
+    SELECT R.RENTAL_ID,
+           R.CUSTOMER_ID,
+           R.RENTAL_DATE,
+           R.RETURN_DATE,
+           F.RENTAL_DURATION,
+           F.RENTAL_RATE,
+           F.REPLACEMENT_COST
+    FROM RENTAL R
+    JOIN INVENTORY I ON I.INVENTORY_ID = R.INVENTORY_ID
+    JOIN FILM F      ON F.FILM_ID      = I.FILM_ID
+),
+CORTE AS (
+    SELECT TRUNC(MAX(RENTAL_DATE)) AS FECHA_CORTE,
+           MAX(RENTAL_DATE)        AS ULTIMO_ARRIENDO
+    FROM RENTAL
+),
+DEVUELTO AS (
+    SELECT A.*,
+           TRUNC(A.RETURN_DATE - A.RENTAL_DATE) AS DIAS
+    FROM ARRIENDO A
+    WHERE A.RETURN_DATE IS NOT NULL
+),
+SIN_DEVOLVER AS (
+    SELECT A.*,
+           TRUNC(C.FECHA_CORTE - A.RENTAL_DATE) - A.RENTAL_DURATION AS DIAS_ATRASO
+    FROM ARRIENDO A
+    CROSS JOIN CORTE C
+    WHERE A.RETURN_DATE IS NULL
+),
+CON_VENCIDA AS (
+    SELECT B.RENTAL_ID,
+           B.CUSTOMER_ID
+    FROM ARRIENDO B
+    WHERE EXISTS (
+        SELECT 1
+        FROM ARRIENDO A
+        WHERE A.CUSTOMER_ID = B.CUSTOMER_ID
+          AND A.RENTAL_ID  <> B.RENTAL_ID
+          AND A.RENTAL_DATE + A.RENTAL_DURATION < B.RENTAL_DATE
+          AND (A.RETURN_DATE IS NULL OR A.RETURN_DATE > B.RENTAL_DATE)
+    )
+),
+COPIA AS (
+    SELECT I.INVENTORY_ID,
+           F.REPLACEMENT_COST,
+           NVL(SUM(P.AMOUNT), 0) AS INGRESO
+    FROM INVENTORY I
+    JOIN FILM F         ON F.FILM_ID      = I.FILM_ID
+    LEFT JOIN RENTAL R  ON R.INVENTORY_ID = I.INVENTORY_ID
+    LEFT JOIN PAYMENT P ON P.RENTAL_ID    = R.RENTAL_ID
+    GROUP BY I.INVENTORY_ID, F.REPLACEMENT_COST
+),
+TABLA_SAKILA AS (
+    SELECT TABLE_NAME
+    FROM USER_TABLES
+    WHERE TABLE_NAME IN ('ACTOR', 'ADDRESS', 'CATEGORY', 'CITY', 'COUNTRY',
+                         'CUSTOMER', 'FILM', 'FILM_ACTOR', 'FILM_CATEGORY',
+                         'FILM_TEXT', 'INVENTORY', 'LANGUAGE', 'PAYMENT',
+                         'RENTAL', 'STAFF', 'STORE')
+)
+SELECT ORDEN,
+       HALLAZGO,
+       DATO,
+       VALOR_ORACLE,
+       VALOR_PLAN,
+       CASE WHEN VALOR_ORACLE = VALOR_PLAN THEN 'OK' ELSE 'REVISAR' END AS ESTADO
+FROM (
+    SELECT 1 AS ORDEN, 'H1' AS HALLAZGO, 'Pagos con RENTAL_ID nulo' AS DATO,
+           COUNT(CASE WHEN RENTAL_ID IS NULL THEN 1 END) AS VALOR_ORACLE, 5 AS VALOR_PLAN
+    FROM PAYMENT
+    UNION ALL
+    SELECT 2, 'H1', 'Pagos totales', COUNT(*), 16049
+    FROM PAYMENT
+    UNION ALL
+    SELECT 3, 'H2', 'FK_PAYMENT_RENTAL es ON DELETE SET NULL (1 = si)', COUNT(*), 1
+    FROM USER_CONSTRAINTS
+    WHERE CONSTRAINT_NAME = 'FK_PAYMENT_RENTAL'
+      AND DELETE_RULE     = 'SET NULL'
+    UNION ALL
+    SELECT 4, 'H3', 'Dias promedio que se retiene una pelicula', ROUND(AVG(DIAS), 1), 4.5
+    FROM DEVUELTO
+    UNION ALL
+    SELECT 5, 'H3', '% devoluciones tarde con plazo de 3 dias',
+           ROUND(100 * AVG(CASE WHEN DIAS > RENTAL_DURATION THEN 1 ELSE 0 END), 1), 61.8
+    FROM DEVUELTO
+    WHERE RENTAL_DURATION = 3
+    UNION ALL
+    SELECT 6, 'H3', '% devoluciones tarde con plazo de 7 dias',
+           ROUND(100 * AVG(CASE WHEN DIAS > RENTAL_DURATION THEN 1 ELSE 0 END), 1), 17.7
+    FROM DEVUELTO
+    WHERE RENTAL_DURATION = 7
+    UNION ALL
+    SELECT 7, 'H3', '% devoluciones tarde en total (4 de cada 10)',
+           ROUND(100 * AVG(CASE WHEN DIAS > RENTAL_DURATION THEN 1 ELSE 0 END)), 40
+    FROM DEVUELTO
+    UNION ALL
+    SELECT 8, 'H4', 'Multa cobrada USD (monto sobre la tarifa)',
+           ROUND(SUM(P.AMOUNT - D.RENTAL_RATE)), 20192
+    FROM PAYMENT P
+    JOIN DEVUELTO D ON D.RENTAL_ID = P.RENTAL_ID
+    UNION ALL
+    SELECT 9, 'H4', 'Ingreso total USD', ROUND(SUM(AMOUNT)), 67417
+    FROM PAYMENT
+    UNION ALL
+    SELECT 10, 'H4', '% del ingreso que es multa',
+           ROUND(100 * SUM(P.AMOUNT - D.RENTAL_RATE) / (SELECT SUM(AMOUNT) FROM PAYMENT)), 30
+    FROM PAYMENT P
+    JOIN DEVUELTO D ON D.RENTAL_ID = P.RENTAL_ID
+    UNION ALL
+    SELECT 11, 'H4', 'Pagos que no siguen tarifa + 1 USD por dia iniciado de atraso', COUNT(*), 0
+    FROM PAYMENT P
+    JOIN DEVUELTO D ON D.RENTAL_ID = P.RENTAL_ID
+    WHERE P.AMOUNT <> D.RENTAL_RATE
+                      + GREATEST(CEIL(D.RETURN_DATE - D.RENTAL_DATE) - D.RENTAL_DURATION, 0)
+    UNION ALL
+    SELECT 12, 'H5', 'Clientes que arrendaron con otra copia vencida en casa',
+           COUNT(DISTINCT CUSTOMER_ID), 548
+    FROM CON_VENCIDA
+    UNION ALL
+    SELECT 13, 'H5', 'Arriendos hechos con otra copia vencida en casa', COUNT(*), 2434
+    FROM CON_VENCIDA
+    UNION ALL
+    SELECT 14, 'H6', 'Clientes inactivos', COUNT(*), 15
+    FROM CUSTOMER
+    WHERE ACTIVE = '0'
+    UNION ALL
+    SELECT 15, 'H6', 'Arriendos de clientes inactivos', COUNT(*), 404
+    FROM RENTAL R
+    JOIN CUSTOMER C ON C.CUSTOMER_ID = R.CUSTOMER_ID
+    WHERE C.ACTIVE = '0'
+    UNION ALL
+    SELECT 16, 'H7', 'Copias que aun no recuperan su costo de reposicion',
+           COUNT(CASE WHEN INGRESO < REPLACEMENT_COST THEN 1 END), 3331
+    FROM COPIA
+    UNION ALL
+    SELECT 17, 'H7', 'Copias en inventario', COUNT(*), 4581
+    FROM COPIA
+    UNION ALL
+    SELECT 18, 'H7', 'Brecha por recuperar USD',
+           ROUND(SUM(CASE WHEN INGRESO < REPLACEMENT_COST
+                          THEN REPLACEMENT_COST - INGRESO END)), 35009
+    FROM COPIA
+    UNION ALL
+    SELECT 19, 'H8', 'Peliculas sin ninguna copia en inventario', COUNT(*), 42
+    FROM FILM F
+    WHERE NOT EXISTS (SELECT 1 FROM INVENTORY I WHERE I.FILM_ID = F.FILM_ID)
+    UNION ALL
+    SELECT 20, 'H8', 'Peliculas en catalogo', COUNT(*), 1000
+    FROM FILM
+    UNION ALL
+    SELECT 21, 'H9', 'Copias sin devolver cuya multa supera su costo',
+           COUNT(CASE WHEN DIAS_ATRASO > REPLACEMENT_COST THEN 1 END), 1
+    FROM SIN_DEVOLVER
+    UNION ALL
+    SELECT 22, 'H9', 'Dias de atraso de esa copia',
+           MAX(CASE WHEN DIAS_ATRASO > REPLACEMENT_COST THEN DIAS_ATRASO END), 170
+    FROM SIN_DEVOLVER
+    UNION ALL
+    SELECT 23, 'H9', 'Costo de reposicion de esa copia USD',
+           MAX(CASE WHEN DIAS_ATRASO > REPLACEMENT_COST THEN REPLACEMENT_COST END), 20.99
+    FROM SIN_DEVOLVER
+    UNION ALL
+    SELECT 24, 'H10', 'Tablas de Sakila con LAST_UPDATE', COUNT(*), 15
+    FROM USER_TAB_COLUMNS
+    WHERE COLUMN_NAME = 'LAST_UPDATE'
+      AND TABLE_NAME IN (SELECT TABLE_NAME FROM TABLA_SAKILA)
+    UNION ALL
+    SELECT 25, 'H10', 'Columnas de Sakila que guardan usuario u operacion', COUNT(*), 0
+    FROM USER_TAB_COLUMNS
+    WHERE TABLE_NAME IN (SELECT TABLE_NAME FROM TABLA_SAKILA)
+      AND (COLUMN_NAME LIKE '%USUARIO%'
+           OR COLUMN_NAME LIKE '%OPERA%'
+           OR COLUMN_NAME LIKE '%MODIFIED%'
+           OR COLUMN_NAME LIKE '%CREATED%')
+    UNION ALL
+    SELECT 26, 'P1', 'Fecha de corte = ultimo arriendo truncado (AAAAMMDD)',
+           TO_NUMBER(TO_CHAR(FECHA_CORTE, 'YYYYMMDD')), 20060214
+    FROM CORTE
+    UNION ALL
+    SELECT 27, 'P1', 'Arriendos sin devolver', COUNT(*), 183
+    FROM SIN_DEVOLVER
+    UNION ALL
+    SELECT 28, 'P1', 'Sin devolver arrendados en el ultimo instante del dataset', COUNT(*), 182
+    FROM SIN_DEVOLVER S
+    JOIN CORTE C ON S.RENTAL_DATE = C.ULTIMO_ARRIENDO
+    UNION ALL
+    SELECT 29, 'P1', 'Fuga real: sin devolver y vencidos a la fecha de corte',
+           COUNT(CASE WHEN DIAS_ATRASO > 0 THEN 1 END), 1
+    FROM SIN_DEVOLVER
+    UNION ALL
+    SELECT 30, 'P1', 'Arriendos con exactamente un pago', COUNT(*), 16044
+    FROM (SELECT RENTAL_ID
+          FROM PAYMENT
+          WHERE RENTAL_ID IS NOT NULL
+          GROUP BY RENTAL_ID
+          HAVING COUNT(*) = 1)
+    UNION ALL
+    SELECT 31, 'P1', 'Tarifa ya pagada por los arriendos sin devolver USD', SUM(P.AMOUNT), 518.17
+    FROM PAYMENT P
+    JOIN SIN_DEVOLVER S ON S.RENTAL_ID = P.RENTAL_ID
+    UNION ALL
+    SELECT 32, 'RIESGO', 'PAYMENT_SEQUENCE entregaria un PAYMENT_ID ya usado (1 = si)',
+           CASE WHEN S.LAST_NUMBER <= (SELECT MAX(PAYMENT_ID) FROM PAYMENT) THEN 1 ELSE 0 END, 0
+    FROM USER_SEQUENCES S
+    WHERE S.SEQUENCE_NAME = 'PAYMENT_SEQUENCE'
+    UNION ALL
+    SELECT 33, 'RIESGO', 'RENTAL_SEQUENCE entregaria un RENTAL_ID ya usado (1 = si)',
+           CASE WHEN S.LAST_NUMBER <= (SELECT MAX(RENTAL_ID) FROM RENTAL) THEN 1 ELSE 0 END, 0
+    FROM USER_SEQUENCES S
+    WHERE S.SEQUENCE_NAME = 'RENTAL_SEQUENCE'
+)
+ORDER BY ORDEN;
