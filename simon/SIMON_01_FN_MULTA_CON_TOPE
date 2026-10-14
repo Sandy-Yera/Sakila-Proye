@@ -1,0 +1,55 @@
+/*
+  ¿A qué problema responde?
+    Sakila cobra 1 USD por cada día de atraso sin límite, así que la multa
+    puede superar el valor de la copia.
+    
+  ¿Qué dicen los datos?
+    Las multas suman 20.192 de 67.417 USD (30% del ingreso). Una copia de
+    ACADEMY DINOSAUR acumula 171 días de atraso sobre un costo de 20,99 USD.
+    
+  Supuestos
+    Contamos los días por calendario, como cobra Sakila (D2). Si la copia no
+    se ha devuelto, medimos el atraso hasta FN_FECHA_CORTE. No leemos RENTAL
+    para que TRG_TOPE_MULTA_DEVOLUCION pueda llamarnos sin tabla mutante.
+
+
+  Hallazgo e indicador
+  H4: La multa es ingreso, no solo castigo
+  H9: La multa sin topa supera el valor de la copia
+*/
+CREATE OR REPLACE FUNCTION FN_MULTA_CON_TOPE(
+  p_inventory_id IN INVENTORY.INVENTORY_ID%TYPE,
+  p_rental_date  IN RENTAL.RENTAL_DATE%TYPE,
+  p_return_date  IN RENTAL.RETURN_DATE%TYPE)
+    RETURN PAYMENT.AMOUNT%TYPE
+IS
+    C_MULTA_DIARIA     CONSTANT NUMBER := 1;
+    V_RENTAL_DURATION  FILM.RENTAL_DURATION%TYPE;
+    V_REPLACEMENT_COST FILM.REPLACEMENT_COST%TYPE;
+    V_DIAS_ATRASO      NUMBER;
+    
+BEGIN
+    SELECT F.RENTAL_DURATION, F.REPLACEMENT_COST
+    INTO V_RENTAL_DURATION, V_REPLACEMENT_COST
+    FROM FILM F
+    JOIN INVENTORY I ON F.FILM_ID = I.FILM_ID
+    WHERE INVENTORY_ID = P_INVENTORY_ID;
+    
+    -- CALCULA CON LOS DIAS DE ATRASO
+    -- (RETURN_DATE - RENTAL_DATE - V_RENTAL_DURATION)
+    
+    IF (RETURN_DATE IS NULL) THEN
+        V_DIAS_ATRASO := TRUNC(FN_FECHA_CORTE()) - TRUN(RENTAL_DATE) - RENTAL_DURATION;
+    ELSE
+        V_DIAS_ATRASO := TRUNC(RETURN_DATE) - TRUNC(RENTAL_DATE) - RENTAL_DURATION;
+    END IF;
+    
+    -- Evita que la multa sea menor a 0
+    V_DIAS_ATRASO := GREATEST(V_DIAS_ATRASO, 0);
+    
+    RETURN LEAST(V_DIAS_ATRASO * 1, V_REPLACEMENT_COST);
+    
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RAISE_APPLICATION_ERROR(-20201, 'No existe la copia' || p_inventory_id);
+END FN_MULTA_CON_TOPE;
