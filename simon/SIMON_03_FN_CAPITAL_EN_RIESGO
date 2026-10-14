@@ -16,7 +16,8 @@ IS
     V_MONTO_EN_RIESGO NUMBER;
     V_FECHA_CORTE DATE:= FN_FECHA_CORTE;
 BEGIN
-    -- DETERMINAR EL CAPITAL EN 
+    -- Determina el capital que se debe dedicar para reponer
+    -- todas las copias vencidas
     SELECT 
         NVL(SUM(F.REPLACEMENT_COST), 0)
     INTO V_MONTO_EN_RIESGO
@@ -27,4 +28,4 @@ BEGIN
         AND TRUNC(V_FECHA_CORTE) - TRUNC(R.RENTAL_DATE) > F.RENTAL_DURATION;
         
     RETURN V_MONTO_EN_RIESGO;
-END;
+END FN_CAPITAL_EN_RIESGO;
