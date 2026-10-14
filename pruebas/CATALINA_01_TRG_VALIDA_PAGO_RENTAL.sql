@@ -8,7 +8,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('Prueba 1 FALLÓ: el pago sin arriendo entró');
 EXCEPTION
     WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('Prueba 1 OK, pago rechazado: ' || SQLERRM);
+        DBMS_OUTPUT.PUT_LINE('Prueba 1 LOGRADO, pago rechazado: ' || SQLERRM);
 END;
 /
 
@@ -26,7 +26,7 @@ BEGIN
     INSERT INTO PAYMENT (PAYMENT_ID, CUSTOMER_ID, STAFF_ID, RENTAL_ID, AMOUNT, PAYMENT_DATE)
     VALUES (SEQ_PAYMENT_ID.NEXTVAL, V_CUSTOMER_ID, V_STAFF_ID, V_RENTAL_ID, 2.99, SYSDATE);
 
-    DBMS_OUTPUT.PUT_LINE('Prueba 2 OK: entró el pago ' || SEQ_PAYMENT_ID.CURRVAL
+    DBMS_OUTPUT.PUT_LINE('Prueba 2 LOGRADO: entró el pago ' || SEQ_PAYMENT_ID.CURRVAL
                          || ' del arriendo ' || V_RENTAL_ID);
 EXCEPTION
     WHEN OTHERS THEN
