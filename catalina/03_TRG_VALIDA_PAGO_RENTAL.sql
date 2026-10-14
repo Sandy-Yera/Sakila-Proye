@@ -10,6 +10,11 @@ Qué dicen los datos?
 Supuestos:
     Se revisa cada pago antes[BEFORE] de que se registren en PAYMENT para lograr rechazarlos en caso de ser nulos, en 
     caso de ser nulo se lanzaria un error.
+    C1 solo revisa el pago que entra y no consulta RENTAL; así no falla cuando C2
+    inserta una multa mientras se modifica RENTAL (error de tabla mutante).
+    Sakila ya tiene otro trigger en PAYMENT; no importa cuál corra primero
+    porque cada uno revisa columnas distintas.
+    
     No se corregio los 5 pagos nulos solo validamos los pagos nuevos.
     Es trigger y no una validación manual porque se dispara solo y ningún programa lo salta.
     
