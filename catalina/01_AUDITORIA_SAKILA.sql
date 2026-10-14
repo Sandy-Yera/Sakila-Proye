@@ -1,6 +1,6 @@
 /*
 A qué problema responde?
-   Soluciona el problema de realizar un registro cuando se hace un Insert, Update, Delete, etc a un arriendo o pago y tampoco
+        Soluciona el problema cuando sakila no deja un registro cuando se hace un Insert, Update o Delete a un arriendo o pago y tampoco
     se muestra que tipo de cambio se realizo. Se realiza un guardado por cada operacion sobre rental y payment para poder rastrearla.
     
 Que dicen los datos?
