@@ -49,5 +49,5 @@ ROLLBACK;
 
 -- Comprobamos que el ROLLBACK borró las líneas y devolvió el pago
 SELECT (SELECT COUNT(*) FROM AUDITORIA_SAKILA) AS LINEAS_DESPUES,
-       (SELECT COUNT(*) FROM PAYMENT)          AS PAGOS
+       (SELECT COUNT(*) FROM PAYMENT)AS PAGOS
 FROM DUAL;
