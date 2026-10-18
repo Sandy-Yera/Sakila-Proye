@@ -54,12 +54,22 @@ Las filas `RIESGO` confirman que `PAYMENT_SEQUENCE` y `RENTAL_SEQUENCE` de Sakil
 
 El script parte con un bloque que borra sus propios objetos si ya existen, para poder correrlo varias veces sin errores.
 
+Luego recolecta las estadísticas del esquema con `DBMS_STATS.GATHER_SCHEMA_STATS`. Los scripts del zip no lo hacen y, sin ellas, Oracle elige planes que recorren `RENTAL` completo por cada cliente o copia: las pruebas pasan de varios minutos a menos de uno.
+
 ## Prueba integrada (F4)
 
 1. Como `SYSTEM`: `DROP USER SAKILA_BDY1103 CASCADE;`
 2. Scripts 1 a 4 del zip.
 3. `entregables/003D-SAKILA-EP2-G01-SCRIPT.sql` completo, de una sola vez.
 4. Pasa si `SELECT * FROM USER_ERRORS;` no devuelve filas y todos los objetos nuevos aparecen `VALID` en `USER_OBJECTS`.
+
+## Capturas (Anexo C)
+
+Cada prueba se ejecuta con F5 (Ejecutar script) y se captura la ventana de SQL Developer con la salida del script visible. Las capturas van en `evidencias/` con este nombre:
+
+`<PERSONA>_<NN>_<OBJETO>_EVIDENCIA.jpg`, por ejemplo `GABRIEL_01_FN_FECHA_CORTE_EVIDENCIA.jpg`.
+
+`<NN>_<OBJETO>` es el mismo del archivo de prueba en `pruebas/`. Si la salida no cabe en una captura, las siguientes terminan en `_EVIDENCIA_2.jpg`, `_EVIDENCIA_3.jpg`. La verificación de cifras es `GABRIEL_00_VERIFICACION_H1_H10_EVIDENCIA.jpg` y la prueba integrada, `GABRIEL_07_SCRIPT_FINAL_EVIDENCIA.jpg`.
 
 ## Forma de trabajo
 
