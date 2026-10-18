@@ -2,7 +2,7 @@
 
 Evaluación Parcial 2 de BDY1103 Taller de Base de Datos, sección 003D, grupo G01: Gabriel Sandoval, Simón Inostroza y Catalina Lobos.
 
-La EP2 convierte los hallazgos de la P1 en 2 packages, 10 procedimientos y funciones y 6 triggers que viven dentro de la base Sakila, sin tocar su estructura original.
+La EP2 convierte los hallazgos de la P1 en 2 packages, 8 procedimientos y funciones sueltos (más 9 miembros públicos dentro de los packages) y 6 triggers que viven dentro de la base Sakila, sin tocar su estructura original.
 
 ## Requisitos
 
@@ -92,7 +92,7 @@ Cada prueba se ejecuta con F5 (Ejecutar script) y se captura la ventana de SQL D
 | Persona | Objetos |
 |---|---|
 | Gabriel | `CLIENTE_MEDALLA`, `FN_FECHA_CORTE`, `FN_PORCENTAJE_EN_PLAZO`, `FN_PUEDE_ARRENDAR`, `SP_MEDALLA_CLIENTE`, `SP_ACTUALIZA_MEDALLAS`, `PKG_RESPONSABILIDAD_CLIENTE` |
-| Simón | `FN_MULTA_CON_TOPE`, `FN_RENTABILIDAD_COPIA`, `FN_CAPITAL_EN_RIESGO`, `SP_REPORTE_FUGA`, `SP_SIMULA_PLAZO`, `PKG_COBRANZA_INVENTARIO` |
+| Simón | `FN_MULTA_CON_TOPE`, `FN_RENTABILIDAD_COPIA`, `FN_CAPITAL_EN_RIESGO`, `PKG_COBRANZA_INVENTARIO` (con `PR_REPORTE_FUGA` y `PR_SIMULA_PLAZO`) |
 | Catalina | `AUDITORIA_SAKILA` y su secuencia, `SEQ_PAYMENT_ID`, `TRG_VALIDA_PAGO_RENTAL`, `TRG_TOPE_MULTA_DEVOLUCION`, `TRG_VALIDA_ARRIENDO`, `TRG_BLOQUEA_BORRADO_RENTAL`, `TRG_AUDITA_RENTAL`, `TRG_AUDITA_PAYMENT` |
 
 ## Entregables
