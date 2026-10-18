@@ -42,6 +42,3 @@ BEGIN
     --Anota una linea en auditoria con la tabla,operacion, quien lo hizo y cuando
 END TRG_AUDITA_RENTAL;
 /
-
-SELECT OBJECT_NAME, STATUS FROM USER_OBJECTS WHERE OBJECT_NAME = 'TRG_AUDITA_RENTAL';
-SELECT * FROM USER_ERRORS WHERE NAME = 'TRG_AUDITA_RENTAL';
