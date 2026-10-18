@@ -1179,9 +1179,6 @@ BEGIN
 END TRG_AUDITA_RENTAL;
 /
 
-SELECT OBJECT_NAME, STATUS FROM USER_OBJECTS WHERE OBJECT_NAME = 'TRG_AUDITA_RENTAL';
-SELECT * FROM USER_ERRORS WHERE NAME = 'TRG_AUDITA_RENTAL';
-
 /*
 --Este código es la segunda mitad de C5. Su propósito es dejar registro de todo lo que se hace con los pagos
 ----un trigger solo puede vigilar una tabla. TRG_AUDITA_RENTAL mira los arriendos y TRG_AUDITA_PAYMENT mira los pagos. 
