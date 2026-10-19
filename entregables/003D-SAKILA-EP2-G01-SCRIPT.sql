@@ -4,7 +4,7 @@ SET SQLBLANKLINES ON
 SET LINESIZE 200
 SET PAGESIZE 200
 
-PROMPT 003D-SAKILA-EP2-G01 · Script final del grupo G01
+PROMPT 003D-SAKILA-EP2-G01, Script final del grupo G01
 
 PROMPT Borramos los objetos de la EP2 si ya existen
 
@@ -51,7 +51,7 @@ Supuestos:
     FECHA_CALCULO registra cuándo corrimos el cálculo, no la fecha de corte.
     SIN DATOS queda para un cliente sin arriendos que evaluar.
 Hallazgo e indicador:
-    H3, H10 · IE2.2.1
+    H3 y H10, indicador IE2.2.1
 */
 CREATE TABLE CLIENTE_MEDALLA (
     CUSTOMER_ID         INT          NOT NULL,
@@ -66,63 +66,59 @@ CREATE TABLE CLIENTE_MEDALLA (
 );
 
 /*
-A qué problema responde?
-        Soluciona el problema cuando sakila no deja un registro cuando se hace un Insert, Update o Delete a un arriendo o pago y tampoco
-    se muestra que tipo de cambio se realizo. Se realiza un guardado por cada operacion sobre rental y payment para poder rastrearla.
-    
-Que dicen los datos?
-    15 de las 16 tablas de Sakila guardan solo LAST_UPDATE, que se sobreescribe en cada
-    cambio, y ninguna columna guarda el usuario ni la operación. Un DELETE no deja rastro.
-    
+¿A qué problema responde?
+    Sakila no deja registro cuando alguien hace un INSERT, UPDATE o DELETE sobre
+    un arriendo o un pago, ni dice qué tipo de cambio fue. Guardamos una línea
+    por cada operación sobre RENTAL y PAYMENT para poder rastrearla.
+¿Qué dicen los datos?
+    15 de las 16 tablas de Sakila guardan solo LAST_UPDATE, que se sobrescribe en
+    cada cambio, y ninguna columna guarda el usuario ni la operación. Un DELETE no
+    deja rastro.
 Supuestos:
     Las líneas las escriben TRG_AUDITA_RENTAL y TRG_AUDITA_PAYMENT, una por sentencia.
-    FECHA usa SYSDATE porque registramos el momento real del cambio; FN_FECHA_CORTE solo
-    sirve para calcular atrasos
-    USUARIO toma USER osea el usuario de Oracle que ejecuta la operación.
+    FECHA usa SYSDATE porque registramos el momento real del cambio. FN_FECHA_CORTE
+    solo sirve para calcular atrasos.
+    USUARIO toma USER, es decir, el usuario de Oracle que ejecuta la operación.
     SEQ_AUDITORIA_SAKILA parte en 1 porque la tabla nace vacía.
-    
-    Hallazgo e indicador:
-    H10 · IE2.3.1, IE2.3.2
+Hallazgo e indicador:
+    H10, indicadores IE2.3.1 e IE2.3.2
 */
 
 CREATE SEQUENCE SEQ_AUDITORIA_SAKILA START WITH 1 INCREMENT BY 1 NOCACHE;
--- La secuencia entrega números que nunca se repiten desde el 1 y subiendo de uno en uno, para identificar cada línea de la auditoría.
+-- Numera cada línea de la auditoría: parte en 1, sube de uno en uno y nunca se repite
 CREATE TABLE AUDITORIA_SAKILA (
     ID_AUDITORIA NUMBER        NOT NULL,
     TABLA        VARCHAR2(30)  NOT NULL,
     OPERACION    VARCHAR2(10)  NOT NULL, 
     USUARIO      VARCHAR2(128) DEFAULT USER    NOT NULL,
     FECHA        DATE          DEFAULT SYSDATE NOT NULL, 
-    --Se registra con SYSDATE debido a que FN_FECHA_CORTE usa la fecha del 2006 y nosotros queremos el momento del cambio.
+    -- Usamos SYSDATE porque FN_FECHA_CORTE devuelve una fecha de 2006 y aquí queremos el momento real del cambio
     CONSTRAINT PK_AUDITORIA_SAKILA PRIMARY KEY (ID_AUDITORIA), 
-    --  no se puede repetir el id ni quedar vacío. 
+    -- El ID no se puede repetir ni quedar vacío
     CONSTRAINT CK_AUDITORIA_SAKILA_OPERACION
         CHECK (OPERACION IN ('INSERT', 'UPDATE', 'DELETE'))
-        --Regla de la tabla donde aceptamos solo estas 3 operaciones.
+        -- Solo aceptamos estas tres operaciones
 );
 
 
 /*
-A qué problema responde?
-    Debido a que PAYMENT_ID esta ocupado, necesitan uno libre. Existe PAYMENT_SEQUENCE de Sakila pero
-    este parte en 1 provocando que choque con los pagos ya hechos, no se puede modificar por lo que se crea una nueva
-    secuencia que empieza justo despues del pago mas alto. -> MAX(PAYMENT_ID) + 1
-    
-Qué dicen los datos?
+¿A qué problema responde?
+    Para insertar el pago de una multa necesitamos un PAYMENT_ID libre. Sakila ya
+    trae PAYMENT_SEQUENCE, pero parte en 1 y chocaría con los pagos cargados. Como
+    no modificamos los objetos de Sakila, creamos una secuencia nueva que parte
+    justo después del pago más alto: MAX(PAYMENT_ID) + 1.
+¿Qué dicen los datos?
     PAYMENT tiene 16.049 pagos y su PAYMENT_ID más alto es 16049. Un pago nuevo con
-    PAYMENT_SEQUENCE recibiría el 1 y fallaría con ORA-00001
-    
+    PAYMENT_SEQUENCE recibiría el 1 y fallaría con ORA-00001.
 Supuestos:
-    Calculamos el inicio con MAX(PAYMENT_ID) + 1 al crearla
-    pensando que PAYMENT ya tiene sus datos cargados seguimos con un
-    START WITH el cual solo acepta un número fijo por eso armamos la orden como texto y la
-    ejecutamos dentro de un EXECUTE IMMEDIATE.
-    
+    Calculamos el inicio con MAX(PAYMENT_ID) + 1 al crearla, con PAYMENT ya cargado.
+    START WITH solo acepta un número fijo, así que armamos la orden como texto y la
+    ejecutamos con EXECUTE IMMEDIATE.
     La usa TRG_TOPE_MULTA_DEVOLUCION para insertar el pago de la multa.
     Los números que gastan las pruebas cerradas con ROLLBACK no se recuperan; NOCACHE
     evita saltos mayores.
 Hallazgo e indicador:
-    H4, H9 (la usa C2) y decisión D1 · IE2.3.1
+    H4 y H9 (la usa C2) y decisión D1, indicador IE2.3.1
 */
 SET SERVEROUTPUT ON;
 
@@ -132,7 +128,7 @@ BEGIN
     -- Buscamos el primer número libre después del pago más alto
     SELECT MAX(PAYMENT_ID) + 1
     INTO V_INICIO
-    --Se guarda el PAYMENT_ID dentro de la Variable anonima
+    -- Guardamos el PAYMENT_ID en la variable del bloque anónimo
     FROM PAYMENT;
 
     -- Armamos la orden como texto porque START WITH no acepta una consulta
@@ -154,7 +150,7 @@ Supuestos:
     Devolvemos la hora exacta del último arriendo, sin truncar (D3).
     La leemos de RENTAL en cada llamada: si llega un arriendo nuevo, el corte avanza con él.
 Hallazgo e indicador:
-    Corrección a la P1 · IE2.1.3, IE2.1.4
+    Corrección a la P1, indicadores IE2.1.3 e IE2.1.4
 */
 CREATE OR REPLACE FUNCTION FN_FECHA_CORTE
 RETURN DATE
@@ -190,7 +186,7 @@ Público y privado:
     FN_INDICE_AJUSTADO y PR_IMPRIMIR. Son reglas y cálculos internos que podemos
     cambiar sin tocar a quien llama al package.
 Hallazgo e indicador:
-    H3, H5 · IE2.2.1, IE2.2.2
+    H3 y H5, indicadores IE2.2.1 e IE2.2.2
 */
 CREATE OR REPLACE PACKAGE PKG_RESPONSABILIDAD_CLIENTE IS
     FUNCTION FN_MEDALLA(P_CUSTOMER_ID IN CUSTOMER.CUSTOMER_ID%TYPE)
@@ -207,27 +203,25 @@ END PKG_RESPONSABILIDAD_CLIENTE;
 
 CREATE OR REPLACE PACKAGE PKG_COBRANZA_INVENTARIO IS 
 /*
-Problema a solcionar.
-- La cobranza, las copias fuera y la rentabilidad del inventario se revisaba
-manualmente, y desde la Prueba 1 con bloques sueltos.
-
-Los datos.
-- Las multas son el 30% de ingresos (20.192 de 67.417 USD). 183 copias fuera, solo 1 está vencida (20,99 USD).
-3.331 de 4.581 copias aún no recuperan su costo, con una brecha de 35.009 USD y 42 películas no tienen copias.
-
-Supuestos
-- Contamos los días por calendario hasta FN_FECHA_CORTE.
-LAS BANDAS DE ATRASO (0, 30, 90 Y 180) vienen de la P1.
-El package no modifica datos
-
-Qué es publico y porqué
-    Los reportes que se hacian manualmente. Quien haga el reporte no necesita
-    saber como se clasifican las copias.
-    
-Qué es privado y porqué
-    Los varray de bandas y umbrales, FN_CLASIFICA_BANDA y PR_IMPRIMIR.
-    Los umbrales pueden cambiar sin tocar a quien llama el package, y nadie fuera
-    de el puede clasificar con otros cortes.
+¿A qué problema responde?
+    La cobranza, las copias fuera y la rentabilidad del inventario se revisaban
+    a mano, y en la P1 con bloques sueltos.
+¿Qué dicen los datos?
+    Las multas son el 30% del ingreso (20.192 de 67.417 USD). Hay 183 copias fuera
+    y solo 1 está vencida (20,99 USD). 3.331 de 4.581 copias aún no recuperan su
+    costo, con una brecha de 35.009 USD, y 42 películas no tienen copias.
+Supuestos:
+    Contamos los días por calendario hasta FN_FECHA_CORTE.
+    Las bandas de atraso (0, 30, 90 y 180 días) vienen de la P1.
+    El package no modifica datos.
+Público y privado:
+    Público: los reportes que antes se hacían a mano. Quien pide un reporte no
+    necesita saber cómo se clasifican las copias.
+    Privado: los VARRAY de bandas y umbrales, FN_CLASIFICA_BANDA y PR_IMPRIMIR.
+    Los umbrales pueden cambiar sin tocar a quien llama al package, y nadie de
+    fuera puede clasificar con otros cortes.
+Hallazgo e indicador:
+    H4, H7, H8 y H9, indicadores IE2.2.1 e IE2.2.2
 */
 
     -- Copias fuera de ambas tiendas, clasificadas por banda, con el capital en riesgo total
@@ -264,7 +258,7 @@ Supuestos:
     Devolvemos NULL si el cliente no tiene arriendos que evaluar.
     Es función porque devuelve un valor y la usamos en un SELECT y en el package.
 Hallazgo e indicador:
-    H3 · IE2.1.3, IE2.1.4
+    H3, indicadores IE2.1.3 e IE2.1.4
 */
 CREATE OR REPLACE FUNCTION FN_PORCENTAJE_EN_PLAZO(P_CUSTOMER_ID IN CUSTOMER.CUSTOMER_ID%TYPE)
 RETURN NUMBER
@@ -309,7 +303,7 @@ Supuestos:
     programa PL/SQL; para usar la medalla en un SELECT existe FN_MEDALLA.
     Lanzamos el error -20101 si el cliente no existe.
 Hallazgo e indicador:
-    H3 · IE2.1.1, IE2.1.2
+    H3, indicadores IE2.1.1 e IE2.1.2
 */
 CREATE OR REPLACE PROCEDURE SP_MEDALLA_CLIENTE(
     P_CUSTOMER_ID IN  CUSTOMER.CUSTOMER_ID%TYPE,
@@ -356,7 +350,7 @@ Supuestos:
     Lanzamos el error -20102 si el cliente no existe.
     Es función porque devuelve un valor y la usamos en un SELECT y en el trigger C3.
 Hallazgo e indicador:
-    H5, H6 · IE2.1.3, IE2.1.4
+    H5 y H6, indicadores IE2.1.3 e IE2.1.4
 */
 CREATE OR REPLACE FUNCTION FN_PUEDE_ARRENDAR(P_CUSTOMER_ID IN CUSTOMER.CUSTOMER_ID%TYPE)
 RETURN VARCHAR2
@@ -419,7 +413,7 @@ Supuestos:
     volvemos a él y relanzamos el error. Cierra la transacción quien llama (D7).
     Es procedimiento porque modifica datos y no devuelve un valor.
 Hallazgo e indicador:
-    H3 · IE2.1.1, IE2.1.2
+    H3, indicadores IE2.1.1 e IE2.1.2
 */
 CREATE OR REPLACE PROCEDURE SP_ACTUALIZA_MEDALLAS
 IS
@@ -452,24 +446,20 @@ END SP_ACTUALIZA_MEDALLAS;
 
 create or replace function fn_capital_en_riesgo return number is
   /*
-  ¿A qué problema responde?
+¿A qué problema responde?
     Sakila no sabe cuánto tendría que gastar para reponer las copias
     vencidas que siguen fuera, si no vuelven.
-
-  ¿Qué dicen los datos?
+¿Qué dicen los datos?
     Al corte hay 183 arriendos sin devolver, pero 182 están dentro del
     plazo. Solo 1 copia está vencida, con un costo de reposición de
     20,99 USD.
-
-  Supuestos
+Supuestos:
     Contamos los días por calendario, como cobra Sakila (D2), hasta
     FN_FECHA_CORTE. Medimos el riesgo con el costo de reposición y no con
     la tarifa, que ya está pagada.
-
-  Hallazgo e indicador
-    H9 y corrección de la P1 sobre copias fugadas.
-    IE2.1.3 e IE2.1.4.
-  */
+Hallazgo e indicador:
+    H9 y corrección de la P1 sobre copias fugadas, indicadores IE2.1.3 e IE2.1.4
+*/
    v_fecha_corte     date := fn_fecha_corte;
    v_monto_en_riesgo number;
 begin
@@ -495,25 +485,21 @@ create or replace function fn_rentabilidad_copia (
    p_inventory_id in inventory.inventory_id%type
 ) return number is 
 /*
-  ¿A qué problema responde?
+¿A qué problema responde?
     Sakila no sabe qué copias ya se pagaron solas y cuáles siguen debiendo
     su costo de reposición.
-
-  ¿Qué dicen los datos?
+¿Qué dicen los datos?
     3.331 de 4.581 copias aún no recuperan su costo de reposición; la brecha
     suma 35.009 USD.
-
-  Supuestos
+Supuestos:
     Los ingresos de una copia son los pagos de sus arriendos, sumando
     tarifa y multa. Los 5 pagos sin RENTAL_ID (H1) no se pueden asignar a
     ninguna copia y quedan fuera. Una copia nunca arrendada devuelve su
     costo en negativo. Un resultado negativo significa que la copia aún
     no se paga sola.
-
-  Hallazgo e indicador
-    H7: copias que no se pagan solas.
-    IE2.1.3 e IE2.1.4.
-  */
+Hallazgo e indicador:
+    H7, copias que no se pagan solas, indicadores IE2.1.3 e IE2.1.4
+*/
    v_replacement_cost film.replacement_cost%type;
    v_ingresos         number;
 begin
@@ -539,7 +525,7 @@ begin
 
    return v_ingresos - v_replacement_cost;
 exception
-    -- ERROR PARA CUANDO EL INVENTORY_ID NO COINCIDA,  
+    -- Error para cuando el INVENTORY_ID no existe
    when no_data_found then
       raise_application_error(
          -20202,
@@ -554,24 +540,21 @@ create or replace function fn_multa_con_tope (
    p_return_date  in rental.return_date%type
 ) return payment.amount%type is
   /*
-  ¿A qué problema responde?
-    Sakila cobra 1 USD por cada día de atraso sin límite, así que la multa
+¿A qué problema responde?
+    Sakila cobra 1 USD por cada día de atraso, sin límite, así que la multa
     puede superar el valor de la copia.
-
-  ¿Qué dicen los datos?
+¿Qué dicen los datos?
     Las multas suman 20.192 de 67.417 USD (30% del ingreso). Una copia de
     ACADEMY DINOSAUR acumula 171 días de atraso sobre un costo de 20,99 USD.
-
-  Supuestos
+Supuestos:
     Contamos los días por calendario, como cobra Sakila (D2). Si la copia no
     se ha devuelto, medimos el atraso hasta FN_FECHA_CORTE. No leemos RENTAL
     para que TRG_TOPE_MULTA_DEVOLUCION pueda llamarnos sin tabla mutante.
-
-  Hallazgo e indicador
+Hallazgo e indicador:
     H4: la multa es ingreso, no solo castigo.
     H9: la multa sin tope supera el valor de la copia.
-    IE2.1.3 e IE2.1.4.
-  */
+    Indicadores IE2.1.3 e IE2.1.4
+*/
    c_multa_diaria     constant number := 1;
    v_rental_duration  film.rental_duration%type;
    v_replacement_cost film.replacement_cost%type;
@@ -636,7 +619,7 @@ Supuestos:
     se calcula una vez y se recalcula sola si cambian RENTAL, INVENTORY o FILM.
     Ningún procedimiento hace COMMIT ni ROLLBACK: usamos SAVEPOINT y RAISE (D7).
 Hallazgo e indicador:
-    H3, H5 · IE2.2.1, IE2.2.2
+    H3 y H5, indicadores IE2.2.1 e IE2.2.2
 */
 CREATE OR REPLACE PACKAGE BODY PKG_RESPONSABILIDAD_CLIENTE IS
     C_UMBRAL_ORO    CONSTANT NUMBER := 1.20;
@@ -1064,27 +1047,24 @@ END PKG_COBRANZA_INVENTARIO;
 PROMPT Triggers
 
 /*
-A qué problema responde?
-    Se encontraron pagos sin mencion a que arriendo es dirigido, ingresandose con RENTAL_ID nulo. Se crea este
-    trigger para cerrarle la puerta a estos registros de pagos incompletos.
-    
-Qué dicen los datos?
-    Los datos dicen que se encontraron 5 registros con un rental_id nulo. Se les habia permitido su ingreso debido a que la tabla
-    acepta columnas vacias.
-    
+¿A qué problema responde?
+    Hay pagos que no dicen a qué arriendo corresponden: entraron con RENTAL_ID
+    nulo. Este trigger le cierra la puerta a esos pagos incompletos.
+¿Qué dicen los datos?
+    Encontramos 5 pagos con RENTAL_ID nulo. Entraron porque la columna acepta
+    valores vacíos.
 Supuestos:
-    Se revisa cada pago antes[BEFORE] de que se registren en PAYMENT para lograr rechazarlos en caso de ser nulos, en 
-    caso de ser nulo se lanzaria un error.
+    Revisamos cada pago antes (BEFORE) de que se guarde en PAYMENT y, si llega
+    sin RENTAL_ID, lanzamos un error.
     C1 solo revisa el pago que entra y no consulta RENTAL; así no falla cuando C2
     inserta una multa mientras se modifica RENTAL (error de tabla mutante).
     Sakila ya tiene otro trigger en PAYMENT; no importa cuál corra primero
     porque cada uno revisa columnas distintas.
-    
-    No se corregio los 5 pagos nulos solo validamos los pagos nuevos.
-    Es trigger y no una validación manual porque se dispara solo y ningún programa lo salta.
-    
+    No corregimos los 5 pagos nulos: solo validamos los pagos nuevos.
+    Es trigger y no una validación manual porque se dispara solo y ningún
+    programa se lo puede saltar.
 Hallazgo e indicador:
-    H1 · IE2.3.1, IE2.3.2
+    H1, indicadores IE2.3.1 e IE2.3.2
 */
 
 
@@ -1092,7 +1072,7 @@ CREATE OR REPLACE TRIGGER TRG_VALIDA_PAGO_RENTAL
 BEFORE INSERT ON PAYMENT
 FOR EACH ROW
 WHEN (NEW.RENTAL_ID IS NULL) 
---Verficamos que antes de ingresar el registro de pago en PAYMENT, se verifique a donde esta dirigido el arriendo(RENTAL_ID).
+-- Antes de guardar el pago en PAYMENT, revisamos que diga a qué arriendo corresponde (RENTAL_ID)
 BEGIN
     RAISE_APPLICATION_ERROR(-20301, 'El pago del cliente ' || :NEW.CUSTOMER_ID
                                     || ' no indica a qué arriendo corresponde');
@@ -1100,70 +1080,57 @@ END TRG_VALIDA_PAGO_RENTAL;
 /
 
 /*
-A qué problema responde?
-Si se borra un arriendo, sus pagos quedan sin saber a qué arriendo pertenecen.
-Se bloquea el borrado de arriendos para que no se creen más pagos huérfanos.
-
-
-Qué dicen los datos?
-    Se encuentra una linea de codigo en el script de Sakila Schema donde
-    se meciona que si se borra un arriendo, a los pagos que apuntaban a él
-    se les pone un rental_id vacio
-
-
+¿A qué problema responde?
+    Si se borra un arriendo, sus pagos quedan sin saber a qué arriendo pertenecen.
+    Bloqueamos el borrado de arriendos para que no se creen más pagos huérfanos.
+¿Qué dicen los datos?
+    En el script de esquema de Sakila, la llave de PAYMENT hacia RENTAL es
+    ON DELETE SET NULL: si se borra un arriendo, los pagos que apuntaban a él
+    quedan con RENTAL_ID vacío.
 Supuestos:
-    Se revisa una sola vez por orden, cualquier delete en RENTAL se rechaza.
-    Se activa aunque el delete no encuentre ningún arriendo.
-    Solo bloquea borrar; crear arriendos o registrar devoluciones sigue funcionando.
-    
-    No se cambio la llave de Sakila, solo la protegemos desde afuera.
+    Revisamos una sola vez por orden: cualquier DELETE en RENTAL se rechaza.
+    Se activa aunque el DELETE no encuentre ningún arriendo.
+    Solo bloquea el borrado; crear arriendos o registrar devoluciones sigue funcionando.
+    No cambiamos la llave de Sakila, solo la protegemos desde fuera.
     Si el DBA necesita borrar algo, apaga el trigger con
     ALTER TRIGGER TRG_BLOQUEA_BORRADO_RENTAL DISABLE y después lo vuelve a encender.
-
-
 Hallazgo e indicador:
-    H2 · IE2.3.1, IE2.3.2
-
+    H2, indicadores IE2.3.1 e IE2.3.2
 */
 
 CREATE OR REPLACE TRIGGER TRG_BLOQUEA_BORRADO_RENTAL
 BEFORE DELETE ON RENTAL 
---Salta antes de que se elimine un arriendo
+-- Se dispara antes de borrar un arriendo
 BEGIN
     RAISE_APPLICATION_ERROR(-20304, 'No se pueden borrar arriendos: sus pagos quedarían sin arriendo (H2).');
 END TRG_BLOQUEA_BORRADO_RENTAL;
 /
 
 /*
-A qué problema responde?
-    Actualmente en Sakila no queda un registro de quien modifica
-    los datos, por ejemplo en fecha de devolucion o si es que borra un pago
-    No se registra que proceso realizo
-
-Qué dicen los datos?
-    Se muestra que las modificaciones realizadas se guardan en LAST_UPDATE pero
-    esta solo menciona la hora del ultimo cambio y se sobreescribe en cada cambio,
-    no dice quien fue, y si la fila se borra desaparece con ella. 15 de 16 tablas
-    tienen solo LAST_UPDATE y ninguna columna guarda el usuario ni la operacion
-    
+¿A qué problema responde?
+    Hoy Sakila no registra quién modifica los datos, por ejemplo una fecha de
+    devolución o el borrado de un pago, ni qué operación hizo.
+¿Qué dicen los datos?
+    Los cambios solo dejan rastro en LAST_UPDATE, que guarda la hora del último
+    cambio y se sobrescribe en cada uno. No dice quién fue, y si la fila se borra,
+    desaparece con ella. 15 de las 16 tablas tienen solo LAST_UPDATE y ninguna
+    columna guarda el usuario ni la operación.
 Supuestos:
-    C5 actua junto a AUDITORIA_SAKILA escribiendose en ella.
-    Se activa  AFTER para anotar solo lo que si ocurrio,
-    al ser de sentencia solo anota una linea por orden, aunque cambie muchas filas.
-    Un DELETE en RENTAL nunca llega a anotarse por que C4 lo rechaza antes y si la operacion
-    termina en un rollback, su linea tambien se borra.
-
+    C5 trabaja junto a AUDITORIA_SAKILA, donde escribe sus líneas.
+    Es AFTER para anotar solo lo que de verdad ocurrió.
+    Es de sentencia, así que anota una línea por orden aunque cambien muchas filas.
+    Un DELETE en RENTAL nunca llega a anotarse porque C4 lo rechaza antes, y si la
+    operación termina en ROLLBACK, su línea también se borra.
 Hallazgo e indicador:
-    H10 · IE2.3.1, IE2.3.2
-
+    H10, indicadores IE2.3.1 e IE2.3.2
 */
 
 CREATE OR REPLACE TRIGGER TRG_AUDITA_RENTAL
 AFTER INSERT OR UPDATE OR DELETE ON RENTAL
---Se ejecuta despues de la operacion para anotar lo que esta pasando en el momento
+-- Se ejecuta después de la operación para anotar lo que pasó
 DECLARE
     V_OPERACION AUDITORIA_SAKILA.OPERACION%TYPE;
-    --Guarda la operacion utilizada
+    -- Guarda la operación que se usó
 BEGIN
     IF INSERTING THEN
         V_OPERACION := 'INSERT';
@@ -1175,45 +1142,43 @@ BEGIN
 
     INSERT INTO AUDITORIA_SAKILA (ID_AUDITORIA, TABLA, OPERACION)
     VALUES (SEQ_AUDITORIA_SAKILA.NEXTVAL, 'RENTAL', V_OPERACION);
-    --Anota una linea en auditoria con la tabla,operacion, quien lo hizo y cuando
+    -- Anota una línea en la auditoría con la tabla, la operación, quién la hizo y cuándo
 END TRG_AUDITA_RENTAL;
 /
 
 /*
---Este código es la segunda mitad de C5. Su propósito es dejar registro de todo lo que se hace con los pagos
-----un trigger solo puede vigilar una tabla. TRG_AUDITA_RENTAL mira los arriendos y TRG_AUDITA_PAYMENT mira los pagos. 
-Juntos formarian C5.
+Este código es la segunda mitad de C5 y deja registro de todo lo que se hace
+con los pagos. Un trigger solo puede vigilar una tabla: TRG_AUDITA_RENTAL mira
+los arriendos y TRG_AUDITA_PAYMENT mira los pagos. Juntos forman C5.
 
-A qué problema responde?
-    Actualmente en Sakila no queda un registro de quien modifica
-    los pagos, por ejemplo si alguien cambia el monto de un pago o lo borra.
-    Tampoco se registra que operacion se realizo (INSERT, UPDATE o DELETE).
-
-Qué dicen los datos?
-    Las modificaciones realizadas se guardan en LAST_UPDATE pero
-    esta solo menciona la hora del ultimo cambio y se sobreescribe en cada cambio,
-    no dice quien fue, y si la fila se borra desaparece con ella. 15 de 16 tablas
-    tienen solo LAST_UPDATE y ninguna columna guarda el usuario ni la operacion.
-    En PAYMENT esto toca dinero: 16.049 pagos por 67.417 USD sin registro de quien los cambia.
-
+¿A qué problema responde?
+    Hoy Sakila no registra quién modifica los pagos, por ejemplo si alguien
+    cambia el monto de un pago o lo borra, ni qué operación hizo (INSERT,
+    UPDATE o DELETE).
+¿Qué dicen los datos?
+    Los cambios solo dejan rastro en LAST_UPDATE, que guarda la hora del último
+    cambio y se sobrescribe en cada uno. No dice quién fue, y si la fila se borra,
+    desaparece con ella. 15 de las 16 tablas tienen solo LAST_UPDATE y ninguna
+    columna guarda el usuario ni la operación. En PAYMENT esto toca dinero:
+    16.049 pagos por 67.417 USD sin registro de quién los cambia.
 Supuestos:
-    C5 actua junto a AUDITORIA_SAKILA escribiendose en ella.
-    Se activa despues de la operacion (AFTER), anotando solo lo que si ocurrio.
-    Al ser de sentencia solo anota una linea por orden, aunque cambie muchas filas.
-    Un DELETE en PAYMENT si queda anotado, porque en PAYMENT no hay un trigger que lo bloquee.
-    Tambien anota los pagos de multa que insertara C2, asi queda registro de los cobros automaticos.
-    Si la operacion termina en un rollback, su linea tambien se borra.
-
+    C5 trabaja junto a AUDITORIA_SAKILA, donde escribe sus líneas.
+    Es AFTER, así que anota solo lo que de verdad ocurrió.
+    Es de sentencia, así que anota una línea por orden aunque cambien muchas filas.
+    Un DELETE en PAYMENT sí queda anotado, porque ningún trigger lo bloquea.
+    También anota los pagos de multa que inserta C2, así queda registro de los
+    cobros automáticos.
+    Si la operación termina en ROLLBACK, su línea también se borra.
 Hallazgo e indicador:
-    H10 · IE2.3.1, IE2.3.2
+    H10, indicadores IE2.3.1 e IE2.3.2
 */
 
 CREATE OR REPLACE TRIGGER TRG_AUDITA_PAYMENT
 AFTER INSERT OR UPDATE OR DELETE ON PAYMENT
---Se ejecuta despues de la operacion para anotar lo que ocurrio en PAYMENT
+-- Se ejecuta después de la operación para anotar lo que pasó en PAYMENT
 DECLARE
     V_OPERACION AUDITORIA_SAKILA.OPERACION%TYPE;
-    --Guarda la operacion utilizada
+    -- Guarda la operación que se usó
 BEGIN
     IF INSERTING THEN
         V_OPERACION := 'INSERT';
@@ -1225,34 +1190,32 @@ BEGIN
 
     INSERT INTO AUDITORIA_SAKILA (ID_AUDITORIA, TABLA, OPERACION)
     VALUES (SEQ_AUDITORIA_SAKILA.NEXTVAL, 'PAYMENT', V_OPERACION);
-    --Anota una linea en auditoria con la tabla, operacion, quien lo hizo y cuando
+    -- Anota una línea en la auditoría con la tabla, la operación, quién la hizo y cuándo
 END TRG_AUDITA_PAYMENT;
 /
 
 /*
-Conexion:
-    cuando alguien intenta registrar un arriendo nuevo, el trigger le pregunta a la función de Gabriel si ese cliente puede arrendar.
-    Si la respuesta no es 'SI', rechaza el arriendo y muestra el motivo
-    
-A qué problema responde?
-    Sakila deja arrendar a cualquier cliente, aunque este inactivo o tenga copias
-    vencidas en casa. Rechazamos el arriendo nuevo cuando el cliente no puede arrendar
-    y mostramos el motivo.
-
-Qué dicen los datos?
-    490 clientes hicieron 1.709 arriendos teniendo otra copia vencida en casa
-    y 15 clientes inactivos registran 404 arriendos 
-
+Conexión:
+    Cuando alguien intenta registrar un arriendo nuevo, el trigger le pregunta a
+    la función de Gabriel si ese cliente puede arrendar. Si la respuesta no es
+    'SI', rechaza el arriendo y muestra el motivo.
+¿A qué problema responde?
+    Sakila deja arrendar a cualquier cliente, aunque esté inactivo o tenga copias
+    vencidas en casa. Rechazamos el arriendo nuevo cuando el cliente no puede
+    arrendar y mostramos el motivo.
+¿Qué dicen los datos?
+    490 clientes hicieron 1.709 arriendos teniendo otra copia vencida en casa,
+    y 15 clientes inactivos registran 404 arriendos.
 Supuestos:
-    Es de fila y con BEFORE INSERT revisamos el cliente de cada arriendo antes de guardarlo.
-    La decision la toma FN_PUEDE_ARRENDAR de Gabriel, el trigger solo la hace cumplir.
-    Funciona con INSERT...VALUES de una fila. con INSERT...SELECT da ORA-04091
-    osea una tabla mutante porque la funcion lee RENTAL. 
-    Queda como limitacion. la mejora seria un trigger compuesto.
-    No corrige los arriendos antiguos y solo revisa los nuevos.
-
+    Es de fila y BEFORE INSERT: revisamos el cliente de cada arriendo antes de
+    guardarlo.
+    La decisión la toma FN_PUEDE_ARRENDAR, de Gabriel; el trigger solo la hace cumplir.
+    Funciona con INSERT ... VALUES de una fila. Con INSERT ... SELECT da ORA-04091,
+    es decir, tabla mutante, porque la función lee RENTAL.
+    Queda como limitación; la mejora sería un trigger compuesto.
+    No corrige los arriendos antiguos, solo revisa los nuevos.
 Hallazgo e indicador:
-    H5, H6 · IE2.3.1, IE2.3.2
+    H5 y H6, indicadores IE2.3.1 e IE2.3.2
 */
 
 CREATE OR REPLACE TRIGGER TRG_VALIDA_ARRIENDO
@@ -1273,47 +1236,39 @@ END TRG_VALIDA_ARRIENDO;
 /
 
 /*
-
-
-A qué problema responde?
-    Sakila cobra 1 USD por cada dia de atraso sin limite, asi que la multa puede
-    superar lo que vale la copia. Cuando se registra una devolucion con atraso,
+¿A qué problema responde?
+    Sakila cobra 1 USD por cada día de atraso, sin límite, así que la multa puede
+    superar lo que vale la copia. Cuando se registra una devolución con atraso,
     cobramos solo la multa con tope y la anotamos como un pago nuevo.
-
-Qué dicen los datos?
+¿Qué dicen los datos?
     Las multas son 20.192 de los 67.417 USD de ingreso, cerca del 30%.
-    Una copia de ACADEMY DINOSAUR acumula 171 dias de atraso sobre un costo de
-    20,99 USD sin tope se cobrarian 171 USD por una copia que vale 20,99.
-
+    Una copia de ACADEMY DINOSAUR acumula 171 días de atraso sobre un costo de
+    20,99 USD: sin tope, se cobrarían 171 USD por una copia que vale 20,99.
 Supuestos:
-    Es de fila y con AFTER UPDATE OF RETURN_DATE cobramos cuando la devolucion ya quedo registrada.
-    Solo actua si el arriendo no estaba devuelto y ahora si lo esta (OLD vacio y NEW con fecha)
-    asi no cobramos dos veces si alguien corrige una fecha.
-    
-    El pago nuevo usa SEQ_PAYMENT_ID.NEXTVAL y su fecha es la de la devolucion.
-    El INSERT en PAYMENT dispara C1, que lo deja pasar porque trae RENTAL_ID, y C5 que lo anota.
-    Si la copia vuelve dentro del plazo, la multa es 0 y no se crea ningun pago.
-    
- Conexion:
-    El monto lo calcula FN_MULTA_CON_TOPE de Simon, que solo lee INVENTORY y FILM cuando
-    recibe una fecha de devolucion. Con el WHEN nunca le pasamos una fecha vacia, porque
-    en ese caso leeria RENTAL y daria ORA-04091 (tabla mutante).
-    
-    
-
+    Es de fila y AFTER UPDATE OF RETURN_DATE: cobramos cuando la devolución ya
+    quedó registrada.
+    Solo actúa si el arriendo no estaba devuelto y ahora sí lo está (OLD vacío y
+    NEW con fecha), así no cobramos dos veces si alguien corrige una fecha.
+    El pago nuevo usa SEQ_PAYMENT_ID.NEXTVAL y su fecha es la de la devolución.
+    El INSERT en PAYMENT dispara C1, que lo deja pasar porque trae RENTAL_ID, y C5,
+    que lo anota.
+    Si la copia vuelve dentro del plazo, la multa es 0 y no se crea ningún pago.
+Conexión:
+    El monto lo calcula FN_MULTA_CON_TOPE, de Simón, que solo lee INVENTORY y FILM
+    cuando recibe una fecha de devolución. Con el WHEN nunca le pasamos una fecha
+    vacía, porque en ese caso leería RENTAL y daría ORA-04091 (tabla mutante).
 Hallazgo e indicador:
-    H4, H9 · IE2.3.1, 
-    IE2.3.2
+    H4 y H9, indicadores IE2.3.1 e IE2.3.2
 */
 
 CREATE OR REPLACE TRIGGER TRG_TOPE_MULTA_DEVOLUCION
 AFTER UPDATE OF RETURN_DATE ON RENTAL
 FOR EACH ROW
 WHEN (OLD.RETURN_DATE IS NULL AND NEW.RETURN_DATE IS NOT NULL)
---Se ejecuta cuando un arriendo pasa de no devuelto a devuelto
+-- Se ejecuta cuando un arriendo pasa de no devuelto a devuelto
 DECLARE
     V_MULTA PAYMENT.AMOUNT%TYPE;
-    --Guarda la multa con tope que calcula la funcion de Simon
+    -- Guarda la multa con tope que calcula la función de Simón
 BEGIN
     V_MULTA := FN_MULTA_CON_TOPE(:NEW.INVENTORY_ID, :NEW.RENTAL_DATE, :NEW.RETURN_DATE);
 
@@ -1321,7 +1276,7 @@ BEGIN
         INSERT INTO PAYMENT (PAYMENT_ID, CUSTOMER_ID, STAFF_ID, RENTAL_ID, AMOUNT, PAYMENT_DATE)
         VALUES (SEQ_PAYMENT_ID.NEXTVAL, :NEW.CUSTOMER_ID, :NEW.STAFF_ID, :NEW.RENTAL_ID,
                 V_MULTA, :NEW.RETURN_DATE);
-        --Cobramos la multa como un pago nuevo del mismo cliente y del mismo arriendo
+        -- Cobramos la multa como un pago nuevo del mismo cliente y del mismo arriendo
     END IF;
 END TRG_TOPE_MULTA_DEVOLUCION;
 /
@@ -1601,24 +1556,19 @@ FROM CLIENTE_MEDALLA;
 PROMPT Demostración: funciones y PKG_COBRANZA_INVENTARIO
 
 /*
-Este script contiene las pruebas de cada función, procedimiento y package creado llamandolos.
-
-FN_MULTA_CON_TOPE(INVENTORY_ID, RENTAL_DATE, RETURN_DATE)
-
-
-
+Pruebas de cada función, procedimiento y package: llamamos a cada uno y
+comparamos su resultado con lo esperado.
+FN_MULTA_CON_TOPE recibe INVENTORY_ID, RENTAL_DATE y RETURN_DATE.
 */
 
 /* =========================================================
-   P1 · FN_MULTA_CON_TOPE (función con parámetros) · H4, H9
+   P1. FN_MULTA_CON_TOPE, función con parámetros (H4, H9)
    ========================================================= */
 
 /*
-Test realizado para "FN_MULTA_CON_TOPE", 
-aquí buscamos directamente uno de los rental
-Se utilizó un rental que se relacione con una pelicula que 
-tiene una multa superior al coste de reemplazo
-Esperado: 20,99 USD
+Prueba de FN_MULTA_CON_TOPE: buscamos directamente un arriendo de una
+película cuya multa supera el costo de reposición.
+Esperado: 20,99 USD.
 */ 
 SELECT R.RENTAL_ID,
        F.TITLE,
@@ -1660,7 +1610,7 @@ END;
 
 
 -- P1.3
--- Error controlado: No existe la copia 999999
+-- Error controlado: no existe la copia 999999
 BEGIN
   DBMS_OUTPUT.PUT_LINE(FN_MULTA_CON_TOPE(999999, SYSDATE, SYSDATE));
 EXCEPTION
@@ -1670,12 +1620,12 @@ END;
 /
 
 /* =========================================================
-   P2 · FN_RENTABILIDAD_COPIA (función con parámetro) · H7
+   P2. FN_RENTABILIDAD_COPIA, función con parámetro (H7)
    ========================================================= */
 
--- P2.1 En un SELECT sobre las 4.581 copias. Esperado: 3.331 copias y ~35.009 USD.
--- Para las copias que no són rentables, muestra la cantidad de copias que aún no recuperan su costo
--- y cual es su brecha
+-- P2.1 En un SELECT sobre las 4.581 copias. Esperado: 3.331 copias y cerca de 35.009 USD.
+-- Cuenta las copias que aún no recuperan su costo
+-- y suma su brecha
 SELECT COUNT(*)               AS COPIAS_SIN_RECUPERAR,
        ROUND(-SUM(RESULTADO)) AS BRECHA_USD
   FROM (SELECT FN_RENTABILIDAD_COPIA(INVENTORY_ID) AS RESULTADO FROM INVENTORY)
@@ -1695,15 +1645,15 @@ SELECT *
 
 
 /* =========================================================================
-   P3 · FN_CAPITAL_EN_RIESGO (función sin parámetros) · H9, corrección P1
+   P3. FN_CAPITAL_EN_RIESGO, función sin parámetros (H9, corrección de la P1)
    ========================================================================= */
 
 -- P3.1 En un SELECT. Esperado: 20,99.
--- Mostramos el dinero acumulado de reposición de las copias que están fuera de la tienda y están fuera del plazo de la fecha tope
+-- Suma el costo de reposición de las copias que siguen fuera y ya vencieron a la fecha de corte
 SELECT FN_CAPITAL_EN_RIESGO AS CAPITAL_EN_RIESGO FROM DUAL;
 
 /* =========================================================================
-   P4 · PKG_COBRANZA_INVENTARIO (package con miembros públicos y privados)
+   P4. PKG_COBRANZA_INVENTARIO, package con miembros públicos y privados
    ========================================================================= */
 
 -- P4.1 PR_REPORTE_FUGA (sin parámetros) como sentencia SQL.
@@ -1713,15 +1663,13 @@ CALL PKG_COBRANZA_INVENTARIO.PR_REPORTE_FUGA();
 
 
 -- P4.2 PR_REPORTE_FUGA_TIENDA (con parámetro) dentro de otro programa PL/SQL.
--- Genera el reporet de fuga para el Id de la tienda.
+-- Genera el reporte de fuga de la tienda indicada
 /*
-
-Encabezado: == Tienda 1 == 
-
-Un reporte de cada una de las copias que no están vigentes de mayor a menor atraso.
+Salida esperada para la tienda 1.
+Encabezado: == Tienda 1 ==
+Detalle de cada copia que ya no está vigente, de mayor a menor atraso:
 Copia 1 | ACADEMY DINOSAUR | 171 días | PERDIDA
-
-Resuemn final del reporte
+Resumen final del reporte:
 BANDA        COPIAS    CAPITAL      MULTA  ACCIÓN SUGERIDA
 VIGENTE          90   1.795,10       0,00  Sin acción, plazo no vencido
 RECUPERABLE       0       0,00       0,00  Recordatorio y cobro de multa
@@ -1737,28 +1685,25 @@ END;
 -- P4.3 PR_REPORTE_RENTABILIDAD (con parámetro) como sentencia SQL.
 -- Genera el reporte de rentabilidad del inventario para el ID de la tienda.
 /*
-
+Salida esperada para la tienda 1.
 Encabezado: === RENTABILIDAD TIENDA 1 ===
-
-Resumen de las copias de la tienda contra su costo de reposición:
-Copias en inventario: 2.270
-Copias que aún no recuperan su costo: [N]
-Brecha por recuperar: [monto] USD
-
-Resumen del catálogo (H8):
-Películas sin copia en esta tienda: [N]
+Copias de la tienda contra su costo de reposición:
+Copias en inventario: 2270
+Copias que aún no recuperan su costo: 1643
+Brecha por recuperar: 17,486.39 USD
+Catálogo (H8):
+Películas sin copia en esta tienda: 241
 Películas sin copia en ninguna tienda: 42
-
-Esperado: entre las dos tiendas suman 4.581 copias, 3.331 sin recuperar
-y una brecha de ~35.009 USD. Las 42 películas sin copia son las mismas
-en ambos reportes, porque no dependen de la tienda.
+Entre las dos tiendas suman 4.581 copias, 3.331 sin recuperar y una brecha
+cercana a 35.009 USD. Las 42 películas sin copia son las mismas en ambos
+reportes, porque no dependen de la tienda.
 */
 CALL PKG_COBRANZA_INVENTARIO.PR_REPORTE_RENTABILIDAD(1);
 CALL PKG_COBRANZA_INVENTARIO.PR_REPORTE_RENTABILIDAD(2);
 
 
 -- P4.4 PR_SIMULA_PLAZO dentro de otro programa PL/SQL: el dilema de 1 a 3 días extra.
--- Esperado: [Monto Multa Esperado] y [% devoluciones tarde]
+-- Esperado: las devoluciones tarde bajan de 45,8% a 34,6%, 23,0% y 14,0%, y se dejan de cobrar entre 7.269 y 16.410 USD de multa
 BEGIN
   FOR i IN 1 .. 3 LOOP
     PKG_COBRANZA_INVENTARIO.PR_SIMULA_PLAZO(i);
@@ -1799,11 +1744,11 @@ PROMPT Demostración: C1 TRG_VALIDA_PAGO_RENTAL
 SET SERVEROUTPUT ON
 
 
---PRUEBA 1--
+-- Prueba 1
 -- Probamos que un pago sin RENTAL_ID dispara el trigger y se rechaza.
 BEGIN
     INSERT INTO PAYMENT (PAYMENT_ID, CUSTOMER_ID, STAFF_ID, RENTAL_ID, AMOUNT, PAYMENT_DATE)
-    VALUES (SEQ_PAYMENT_ID.NEXTVAL, 1, 1, NULL, 2.99, SYSDATE); --> Con un RENTAL_ID nulo
+    VALUES (SEQ_PAYMENT_ID.NEXTVAL, 1, 1, NULL, 2.99, SYSDATE); -- Con RENTAL_ID nulo
 
     DBMS_OUTPUT.PUT_LINE('Prueba 1 FALLÓ: el pago sin arriendo entró');
 EXCEPTION
@@ -1812,7 +1757,7 @@ EXCEPTION
 END;
 /
 
---PRUEBA 2--
+-- Prueba 2
 -- Probamos que un pago con RENTAL_ID no se rechaza y entra
 DECLARE
     V_RENTAL_ID   RENTAL.RENTAL_ID%TYPE;
@@ -1849,13 +1794,13 @@ SET SERVEROUTPUT ON;
 
 
 
---PRUEBA 1------
+-- Prueba 1
 -- Probamos que borrar un arriendo dispara el trigger y se rechaza
 DECLARE
     V_RENTAL_ID RENTAL.RENTAL_ID%TYPE;
 BEGIN
     SELECT MIN(RENTAL_ID) INTO V_RENTAL_ID FROM RENTAL;
-    --Busca el primer arriendo Y intenta borrarlo.
+    -- Busca el primer arriendo e intenta borrarlo
     DELETE FROM RENTAL WHERE RENTAL_ID = V_RENTAL_ID;
 
     DBMS_OUTPUT.PUT_LINE('Prueba 1 FALLÓ: se borró el arriendo ' || V_RENTAL_ID);
@@ -1865,12 +1810,12 @@ EXCEPTION
 END;
 /
 ----------------------------------------------------------------------------------------
---PRUEBA 2---
----El trigger se dispara apenas alguien escribe la orden DELETE aunque afecte a 0 filas
+-- Prueba 2
+-- El trigger se dispara apenas alguien escribe la orden DELETE, aunque afecte a 0 filas
 -- Probamos que se dispara aunque el DELETE no encuentre arriendos, porque es de sentencia
 BEGIN
     DELETE FROM RENTAL WHERE RENTAL_ID = -1;
-    --No existe ningún arriendo con número -1, así que este DELETE no borraría nada. Pero aun así C4 lo rechazaria
+    -- No existe ningún arriendo con número -1, así que este DELETE no borraría nada. Aun así, C4 lo rechaza
 
     DBMS_OUTPUT.PUT_LINE('Prueba 2 FALLÓ: el DELETE sin filas no se rechazó');
 EXCEPTION
@@ -1879,7 +1824,7 @@ EXCEPTION
 END;
 /
 -------------------------------------------------------------------------------
----PRUEBA 3---
+-- Prueba 3
 -- Probamos que un UPDATE en RENTAL no dispara el trigger
 DECLARE
     V_RENTAL_ID RENTAL.RENTAL_ID%TYPE;
@@ -1895,7 +1840,7 @@ EXCEPTION
 END;
 /
 
------------PRUEBA DE QUE NO SE BORRO NADA-----
+-- Comprobamos que no se borró nada
 SELECT (SELECT COUNT(*) FROM RENTAL)AS ARRIENDOS,
        (SELECT COUNT(*) FROM PAYMENT WHERE RENTAL_ID IS NULL) AS PAGOS_SIN_ARRIENDO
 FROM DUAL;
@@ -1906,12 +1851,12 @@ PROMPT Demostración: C5 TRG_AUDITA_RENTAL y TRG_AUDITA_PAYMENT
 
 SET SERVEROUTPUT ON;
 
---PRUEBA 1----
+-- Prueba 1
 -- Contamos las líneas de auditoría antes de las pruebas
 SELECT COUNT(*) AS LINEAS_ANTES FROM AUDITORIA_SAKILA;
 
--- Probamos que un UPDATE de varios arriendos deja una sola línea 
---TRG_AUDITA_RENTAL es de sentencia
+-- Probamos que un UPDATE de varios arriendos deja una sola línea
+-- porque TRG_AUDITA_RENTAL es de sentencia
 BEGIN
     UPDATE RENTAL SET STAFF_ID = STAFF_ID WHERE ROWNUM <= 3;
 
@@ -1919,7 +1864,7 @@ BEGIN
 END;
 /
 
---PRUEBA2
+-- Prueba 2
 -- Probamos que borrar un pago queda anotado (TRG_AUDITA_PAYMENT)
 DECLARE
     V_PAYMENT_ID PAYMENT.PAYMENT_ID%TYPE;
@@ -1932,11 +1877,11 @@ BEGIN
 END;
 /
 
---PRUEBA 3----
+-- Prueba 3
 -- Probamos que una operación rechazada no se anota: C4 frena el DELETE antes de que ocurra
 BEGIN
     DELETE FROM RENTAL WHERE ROWNUM = 1;
-    -- ROWNUM se refiere a encontrar las primeras 3 filas
+    -- ROWNUM limita la orden a las primeras 3 filas
 
     DBMS_OUTPUT.PUT_LINE('Prueba 3 FALLÓ: se borró un arriendo');
 EXCEPTION
@@ -1945,7 +1890,7 @@ EXCEPTION
 END;
 /
 
--- Revisamos lo que anotó la auditoría las cuales deben ser 2 líneas, RENTAL UPDATE y PAYMENT DELETE
+-- Revisamos lo que anotó la auditoría: deben ser 2 líneas, RENTAL UPDATE y PAYMENT DELETE
 SELECT ID_AUDITORIA, TABLA, OPERACION, USUARIO,
        TO_CHAR(FECHA, 'DD/MM/YYYY HH24:MI:SS') AS FECHA
 FROM AUDITORIA_SAKILA
@@ -1965,8 +1910,8 @@ SET SERVEROUTPUT ON
 
 
 
---PRUEBA1---
--- Probamos que un cliente que puede arrendar pasa INSERT..VALUES de una fila
+-- Prueba 1
+-- Probamos que un cliente que puede arrendar pasa con un INSERT ... VALUES de una fila
 DECLARE
     V_RENTAL_ID  RENTAL.RENTAL_ID%TYPE;
     V_CLIENTE    RENTAL.CUSTOMER_ID%TYPE;
@@ -1989,7 +1934,7 @@ EXCEPTION
         DBMS_OUTPUT.PUT_LINE('Prueba 1 FALLÓ: ' || SQLERRM);
 END;
 /
---PRUEBA 2--
+-- Prueba 2
 -- Probamos que un cliente inactivo dispara el trigger y se rechaza
 DECLARE
     V_RENTAL_ID  RENTAL.RENTAL_ID%TYPE;
@@ -2014,8 +1959,8 @@ EXCEPTION
 END;
 /
 
---PRUEBA3---
--- Probamos el riesgo de tabla mutante, el mismo arriendo válido, pero con INSERT..SELECT
+-- Prueba 3
+-- Probamos el riesgo de tabla mutante: el mismo arriendo válido, pero con INSERT ... SELECT
 DECLARE
     V_RENTAL_ID  RENTAL.RENTAL_ID%TYPE;
     V_CLIENTE    RENTAL.CUSTOMER_ID%TYPE;
@@ -2039,8 +1984,9 @@ EXCEPTION
 END;
 /
 /*
- la prueba 3 se lee de abajo hacia arriba, el trigger llamó a la función de Gabriel, 
- que llamó a FN_FECHA_CORTE, que intentó leer RENTAL. Ahí Oracle dijo “tabla mutante”
+La prueba 3 se lee de abajo hacia arriba: el trigger llamó a la función de Gabriel,
+que llamó a FN_FECHA_CORTE, que intentó leer RENTAL. Ahí Oracle respondió con
+tabla mutante.
 */
 
 
@@ -2063,8 +2009,8 @@ PROMPT Demostración: C2 TRG_TOPE_MULTA_DEVOLUCION
 SET SERVEROUTPUT ON
 
 
---PRUEBA 1---
--- Probamos que devolver con mucho atraso cobra la multa con tope 
+-- Prueba 1
+-- Probamos que devolver con mucho atraso cobra la multa con tope
 DECLARE
     V_RENTAL_ID RENTAL.RENTAL_ID%TYPE;
     V_FECHA     RENTAL.RETURN_DATE%TYPE := FN_FECHA_CORTE;
@@ -2096,7 +2042,7 @@ END;
 /
 
 
--- PRUEBA 2 Probamos que devolver dentro del plazo no crea ningún pago
+-- Prueba 2: devolver dentro del plazo no crea ningún pago
 DECLARE
     V_RENTAL_ID RENTAL.RENTAL_ID%TYPE;
     V_FECHA     RENTAL.RETURN_DATE%TYPE := FN_FECHA_CORTE;
